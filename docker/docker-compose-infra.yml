@@ -4,6 +4,7 @@ services:
   mysql:
     image: mysql:8
     container_name: wo-mysql
+    restart: always
     ports:
       - "3306:3306"
     environment:
@@ -24,6 +25,7 @@ services:
   redis:
     image: redis:7
     container_name: wo-redis
+    restart: always
     ports:
       - "6379:6379"
     volumes:
@@ -37,6 +39,7 @@ services:
   elasticsearch:
     image: elasticsearch:8.12.0
     container_name: wo-elasticsearch
+    restart: always
     ports:
       - "9200:9200"
       - "9300:9300"
@@ -52,26 +55,66 @@ services:
       timeout: 10s
       retries: 5
 
-  milvus:
-    image: milvusdb/milvus:v2.4-latest
+  milvus-etcd:
+    image: quay.io/coreos/etcd:v3.5.16
+    container_name: wo-milvus-etcd
+    restart: always
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: "1000"
+      ETCD_QUOTA_BACKEND_BYTES: "4294967296"
+      ETCD_SNAPSHOT_COUNT: "50000"
+    volumes:
+      - milvus-etcd-data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+
+  milvus-minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: wo-milvus-minio
+    restart: always
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - milvus-minio-data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  milvus-standalone:
+    image: milvusdb/milvus:v2.4.22
     container_name: wo-milvus
+    restart: always
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: milvus-etcd:2379
+      MINIO_ADDRESS: milvus-minio:9000
     ports:
       - "19530:19530"
       - "9091:9091"
-    environment:
-      ETCD_USE_EMBED: "true"
-      COMMON_STORAGETYPE: local
     volumes:
       - milvus-data:/var/lib/milvus
+    depends_on:
+      milvus-etcd:
+        condition: service_started
+      milvus-minio:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
       interval: 30s
-      timeout: 10s
-      retries: 5
+      timeout: 20s
+      retries: 3
 
   nacos:
     image: nacos/nacos-server:v2.1.0-slim
     container_name: wo-nacos
+    restart: always
     ports:
       - "8848:8848"
       - "9848:9848"
@@ -83,42 +126,47 @@ services:
     volumes:
       - nacos-data:/home/nacos/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8848/nacos/v1/console/health/readiness"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      test: ["CMD-SHELL", "curl -sf http://localhost:8848/nacos/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
   rocketmq-namesrv:
     image: apache/rocketmq:5.1.4
     container_name: wo-rocketmq-namesrv
+    restart: always
     ports:
       - "9876:9876"
     command: sh mqnamesrv
     environment:
       JAVA_OPT_EXT: "-Xms256m -Xmx256m"
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "9876"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/9876'"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 60s
 
   rocketmq-broker:
     image: apache/rocketmq:5.1.4
     container_name: wo-rocketmq-broker
+    restart: always
     ports:
       - "10911:10911"
       - "10909:10909"
-    command: sh mqbroker -n rocketmq-namesrv:9876 -c /opt/rocketmq/conf/broker.conf
+    command: sh mqbroker -n rocketmq-namesrv:9876
     environment:
       JAVA_OPT_EXT: "-Xms256m -Xmx256m"
       NAMESRV_ADDR: "rocketmq-namesrv:9876"
     depends_on:
       rocketmq-namesrv:
-        condition: service_healthy
+        condition: service_started
 
   kibana:
     image: kibana:8.12.0
     container_name: wo-kibana
+    restart: always
     ports:
       - "5601:5601"
     environment:
@@ -127,10 +175,10 @@ services:
       elasticsearch:
         condition: service_healthy
 
-  # 以下镜像需要 docker pull 预下载
   prometheus:
     image: prom/prometheus:v2.49.0
     container_name: wo-prometheus
+    restart: always
     ports:
       - "9090:9090"
     volumes:
@@ -140,6 +188,7 @@ services:
   grafana:
     image: grafana/grafana:10.3.1
     container_name: wo-grafana
+    restart: always
     ports:
       - "3000:3000"
     environment:
@@ -152,6 +201,8 @@ volumes:
   redis-data:
   es-data:
   milvus-data:
+  milvus-etcd-data:
+  milvus-minio-data:
   nacos-data:
   prometheus-data:
   grafana-data:

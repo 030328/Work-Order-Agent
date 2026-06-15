@@ -5,18 +5,18 @@ spring:
   application:
     name: wo-service-ai-agent
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/wo_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://192.168.213.100:3306/wo_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
     username: root
     password: root123
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: 127.0.0.1
+      host: 192.168.213.100
       port: 6379
   cloud:
     nacos:
       discovery:
-        server-addr: 127.0.0.1:8848
+        server-addr: 192.168.213.100:8848
     ai:
       dashscope:
         api-key: ${DASHSCOPE_API_KEY:sk-placeholder}
@@ -32,12 +32,12 @@ spring:
         version: 1.0.0
 
 milvus:
-  host: 127.0.0.1
+  host: 192.168.213.100
   port: 19530
   collection: wo_knowledge_vectors
 
 rocketmq:
-  name-server: 127.0.0.1:9876
+  name-server: 192.168.213.100:9876
   consumer:
     group: ai-agent-consumer-group
 
