@@ -1,0 +1,64 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: wo-service-ai-agent
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/wo_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: root123
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+    ai:
+      dashscope:
+        api-key: ${DASHSCOPE_API_KEY:sk-placeholder}
+  config:
+    import: optional:nacos:wo-service-ai-agent.yml
+
+  ai:
+    mcp:
+      server:
+        enabled: true
+        transport: sse
+        name: workorder-agent
+        version: 1.0.0
+
+milvus:
+  host: 127.0.0.1
+  port: 19530
+  collection: wo_knowledge_vectors
+
+rocketmq:
+  name-server: 127.0.0.1:9876
+  consumer:
+    group: ai-agent-consumer-group
+
+agent:
+  model: qwen-plus
+  max-tokens: 2000
+  temperature: 0.7
+  memory:
+    window-size: 20
+    summarize-threshold: 15
+  rag:
+    top-k: 5
+
+mybatis-plus:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

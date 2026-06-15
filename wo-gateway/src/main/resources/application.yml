@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: wo-gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+    sentinel:
+      transport:
+        dashboard: 127.0.0.1:8080
+  config:
+    import: optional:nacos:wo-gateway.yml
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway

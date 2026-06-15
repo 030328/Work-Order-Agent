@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.wo.workorder.mapper.WorkOrderMapper">
+
+    <resultMap id="BaseResultMap" type="com.wo.workorder.entity.WoWorkOrder">
+        <id column="id" property="id"/>
+        <result column="order_no" property="orderNo"/>
+        <result column="title" property="title"/>
+        <result column="description" property="description"/>
+        <result column="category" property="category"/>
+        <result column="priority" property="priority"/>
+        <result column="status" property="status"/>
+        <result column="creator_id" property="creatorId"/>
+        <result column="assignee_id" property="assigneeId"/>
+        <result column="department" property="department"/>
+        <result column="sla_deadline" property="slaDeadline"/>
+        <result column="resolved_at" property="resolvedAt"/>
+        <result column="closed_at" property="closedAt"/>
+        <result column="resolution" property="resolution"/>
+        <result column="tags" property="tags"/>
+        <result column="ai_summary" property="aiSummary"/>
+        <result column="ai_sentiment" property="aiSentiment"/>
+        <result column="ai_category_suggestion" property="aiCategorySuggestion"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
+    </resultMap>
+
+</mapper>

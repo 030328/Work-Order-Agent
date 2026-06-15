@@ -1,0 +1,201 @@
+version: '3.8'
+
+services:
+  # ==================== Infrastructure ====================
+  mysql:
+    image: mysql:8
+    container_name: wo-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: wo_system
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: wo-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  elasticsearch:
+    image: elasticsearch:8.12.0
+    container_name: wo-elasticsearch
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+
+  milvus:
+    image: milvusdb/milvus:v2.4-latest
+    container_name: wo-milvus
+    ports:
+      - "19530:19530"
+    environment:
+      ETCD_USE_EMBED: "true"
+      COMMON_STORAGETYPE: local
+    volumes:
+      - milvus-data:/var/lib/milvus
+
+  nacos:
+    image: nacos/nacos-server:v2.1.0-slim
+    container_name: wo-nacos
+    ports:
+      - "8848:8848"
+    environment:
+      MODE: standalone
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.1.4
+    container_name: wo-rocketmq-namesrv
+    ports:
+      - "9876:9876"
+    command: sh mqnamesrv
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.1.4
+    container_name: wo-rocketmq-broker
+    ports:
+      - "10911:10911"
+    command: sh mqbroker -n rocketmq-namesrv:9876
+    depends_on:
+      - rocketmq-namesrv
+
+  # ==================== Application Services ====================
+  wo-gateway:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.gateway
+    container_name: wo-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: nacos:8848
+    depends_on:
+      nacos:
+        condition: service_started
+
+  wo-service-user:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.user
+    container_name: wo-service-user
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/wo_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: nacos:8848
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  wo-service-workorder:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.workorder
+    container_name: wo-service-workorder
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/wo_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_ELASTICSEARCH_URIS: http://elasticsearch:9200
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: nacos:8848
+      ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
+    depends_on:
+      mysql:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_started
+
+  wo-service-workflow:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.workflow
+    container_name: wo-service-workflow
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/wo_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: nacos:8848
+      ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  wo-service-ai-agent:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ai-agent
+    container_name: wo-service-ai-agent
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/wo_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
+      SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: nacos:8848
+      MILVUS_HOST: milvus
+      ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      milvus:
+        condition: service_started
+
+  # ==================== Monitoring ====================
+  kibana:
+    image: kibana:8.12.0
+    container_name: wo-kibana
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+
+  # 以下镜像需要 docker pull 预下载
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    container_name: wo-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: wo-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin123
+
+volumes:
+  mysql-data:
+  redis-data:
+  es-data:
+  milvus-data:

@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'wo-gateway'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['wo-gateway:8080']
+
+  - job_name: 'wo-service-user'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['wo-service-user:8081']
+
+  - job_name: 'wo-service-workorder'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['wo-service-workorder:8082']
+
+  - job_name: 'wo-service-workflow'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['wo-service-workflow:8083']
+
+  - job_name: 'wo-service-ai-agent'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets: ['wo-service-ai-agent:8084']
