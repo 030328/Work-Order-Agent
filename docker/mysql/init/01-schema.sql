@@ -81,6 +81,8 @@ CREATE TABLE wo_flow_record (
     attachment_urls VARCHAR(1000),
     is_system       TINYINT DEFAULT 0,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted         TINYINT NOT NULL DEFAULT 0,
     INDEX idx_wo_id (work_order_id),
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -93,6 +95,8 @@ CREATE TABLE wo_comment (
     is_internal     TINYINT DEFAULT 0,
     is_ai_generated TINYINT DEFAULT 0,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted         TINYINT NOT NULL DEFAULT 0,
     INDEX idx_wo_id (work_order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -105,6 +109,8 @@ CREATE TABLE wo_attachment (
     file_type       VARCHAR(50),
     uploader_id     BIGINT NOT NULL,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted         TINYINT NOT NULL DEFAULT 0,
     INDEX idx_wo_id (work_order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 

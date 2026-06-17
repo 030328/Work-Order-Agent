@@ -1,7 +1,5 @@
 package com.wo.agent.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.wo.common.mybatis.BaseEntity;
 import lombok.Data;
@@ -16,12 +14,6 @@ import java.time.LocalDateTime;
 @EqualsAndHashCode(callSuper = true)
 @TableName("ai_session")
 public class AiSession extends BaseEntity {
-
-    /**
-     * 会话ID（UUID）
-     */
-    @TableId(type = IdType.ASSIGN_ID)
-    private String id;
 
     /**
      * 用户ID

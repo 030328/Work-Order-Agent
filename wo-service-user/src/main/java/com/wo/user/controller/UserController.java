@@ -1,7 +1,7 @@
 package com.wo.user.controller;
 
-import com.wo.common.dto.UserCreateDTO;
-import com.wo.common.dto.UserVO;
+import com.wo.api.dto.user.UserCreateDTO;
+import com.wo.api.dto.user.UserVO;
 import com.wo.common.result.PageResult;
 import com.wo.common.result.R;
 import com.wo.user.service.UserService;

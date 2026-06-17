@@ -2,7 +2,10 @@ package com.wo.workorder.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.wo.api.client.AiAgentClient;
 import com.wo.api.client.UserClient;
+import com.wo.api.dto.ai.WorkOrderAnalysisRequest;
+import com.wo.api.dto.ai.WorkOrderAnalysisResult;
 import com.wo.api.dto.user.UserInfo;
 import com.wo.api.dto.workorder.WorkOrderBriefVO;
 import com.wo.api.dto.workorder.WorkOrderCreateDTO;
@@ -31,7 +34,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -42,11 +44,11 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     private final WorkOrderMapper workOrderMapper;
     private final FlowRecordMapper flowRecordMapper;
     private final UserClient userClient;
+    private final AiAgentClient aiAgentClient;
     private final WorkOrderSearchService workOrderSearchService;
     private final WorkOrderEventPublisher workOrderEventPublisher;
 
     private static final DateTimeFormatter ORDER_NO_DATE_FMT = DateTimeFormatter.ofPattern("yyyyMMdd");
-    private static final AtomicInteger ORDER_SEQ = new AtomicInteger(1);
 
     @Override
     public WorkOrderVO getWorkOrder(Long id) {
@@ -107,6 +109,30 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
         // 索引到ES
         workOrderSearchService.indexWorkOrder(workOrder);
+
+        // 异步调用AI分析
+        try {
+            WorkOrderAnalysisRequest analysisRequest = WorkOrderAnalysisRequest.builder()
+                    .workOrderId(workOrder.getId())
+                    .title(workOrder.getTitle())
+                    .description(workOrder.getDescription())
+                    .category(workOrder.getCategory())
+                    .priority(workOrder.getPriority())
+                    .build();
+
+            R<WorkOrderAnalysisResult> analysisResult = aiAgentClient.analyzeWorkOrder(analysisRequest);
+            if (analysisResult != null && analysisResult.getData() != null) {
+                WorkOrderAnalysisResult aiResult = analysisResult.getData();
+                workOrder.setAiSummary(aiResult.getSummary());
+                workOrder.setAiSentiment(aiResult.getSentiment());
+                workOrder.setAiCategorySuggestion(aiResult.getSuggestedCategory());
+                workOrder.setAiSuggestedSolution(aiResult.getSuggestedSolution());
+                workOrderMapper.updateById(workOrder);
+                log.info("AI分析完成, id={}", workOrder.getId());
+            }
+        } catch (Exception e) {
+            log.warn("AI分析失败, 工单正常创建, id={}", workOrder.getId(), e);
+        }
 
         return convertToVO(workOrder);
     }
@@ -197,12 +223,13 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     }
 
     /**
-     * 生成工单编号: WO-yyyyMMdd-XXXX
+     * 生成工单编号: WO-yyyyMMdd-HHmmss-XXX
      */
     private String generateOrderNo() {
         String dateStr = LocalDate.now().format(ORDER_NO_DATE_FMT);
-        int seq = ORDER_SEQ.getAndIncrement();
-        return String.format("WO-%s-%04d", dateStr, seq);
+        String timeStr = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HHmmss"));
+        int random = (int) (Math.random() * 1000);
+        return String.format("WO-%s-%s-%03d", dateStr, timeStr, random);
     }
 
     /**

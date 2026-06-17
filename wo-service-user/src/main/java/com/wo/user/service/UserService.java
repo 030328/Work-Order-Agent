@@ -1,7 +1,7 @@
 package com.wo.user.service;
 
-import com.wo.common.dto.UserCreateDTO;
-import com.wo.common.dto.UserVO;
+import com.wo.api.dto.user.UserCreateDTO;
+import com.wo.api.dto.user.UserVO;
 import com.wo.common.result.PageResult;
 
 public interface UserService {

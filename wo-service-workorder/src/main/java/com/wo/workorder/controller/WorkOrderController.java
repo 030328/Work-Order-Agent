@@ -41,8 +41,12 @@ public class WorkOrderController {
      * 创建工单
      */
     @PostMapping
-    public R<WorkOrderVO> createWorkOrder(@Valid @RequestBody WorkOrderCreateDTO dto) {
-        Long userId = SecurityUtil.getCurrentUserId();
+    public R<WorkOrderVO> createWorkOrder(@Valid @RequestBody WorkOrderCreateDTO dto,
+                                          @RequestHeader(value = "X-User-Id", required = false) String userIdHeader) {
+        Long userId = userIdHeader != null ? Long.parseLong(userIdHeader) : SecurityUtil.getCurrentUserId();
+        if (userId == null) {
+            userId = 0L; // 默认用户
+        }
         WorkOrderVO vo = workOrderService.createWorkOrder(dto, userId);
         return R.ok(vo);
     }

@@ -15,6 +15,10 @@
     <description>API Gateway - routing, JWT auth, rate limiting, CORS</description>
 
     <dependencies>
+        <dependency>
+            <groupId>com.wo</groupId>
+            <artifactId>wo-common</artifactId>
+        </dependency>
         <!-- Spring Cloud Gateway -->
         <dependency>
             <groupId>org.springframework.cloud</groupId>

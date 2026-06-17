@@ -5,6 +5,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 import org.springframework.cloud.openfeign.EnableFeignClients;
+import org.springframework.context.annotation.ComponentScan;
 
 /**
  * AI Agent 微服务启动类
@@ -14,6 +15,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 @EnableDiscoveryClient
 @EnableFeignClients(basePackages = "com.wo.api.client")
 @MapperScan("com.wo.agent.mapper")
+@ComponentScan(basePackages = {"com.wo.agent", "com.wo.common"})
 public class WoAgentApplication {
 
     public static void main(String[] args) {

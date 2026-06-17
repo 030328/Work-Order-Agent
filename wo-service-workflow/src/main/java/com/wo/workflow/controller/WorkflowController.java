@@ -37,7 +37,7 @@ public class WorkflowController {
     @GetMapping("/definitions")
     public ResponseEntity<List<WfDefinition>> listDefinitions() {
         LambdaQueryWrapper<WfDefinition> wrapper = new LambdaQueryWrapper<>();
-        wrapper.orderByDesc(WfDefinition::getCreateTime);
+        wrapper.orderByDesc(WfDefinition::getCreatedAt);
         List<WfDefinition> definitions = definitionMapper.selectList(wrapper);
         return ResponseEntity.ok(definitions);
     }

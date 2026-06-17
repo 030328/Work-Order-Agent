@@ -2,8 +2,8 @@ package com.wo.user.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.wo.common.dto.UserCreateDTO;
-import com.wo.common.dto.UserVO;
+import com.wo.api.dto.user.UserCreateDTO;
+import com.wo.api.dto.user.UserVO;
 import com.wo.common.enums.ErrorCode;
 import com.wo.common.exception.BizException;
 import com.wo.common.result.PageResult;
@@ -55,7 +55,7 @@ public class UserServiceImpl implements UserService {
         if (StringUtils.hasText(department)) {
             wrapper.eq(SysUser::getDepartment, department);
         }
-        wrapper.orderByDesc(SysUser::getCreateTime);
+        wrapper.orderByDesc(SysUser::getCreatedAt);
 
         // Execute paginated query
         Page<SysUser> pageResult = userMapper.selectPage(new Page<>(page, size), wrapper);
@@ -100,7 +100,6 @@ public class UserServiceImpl implements UserService {
         if (StringUtils.hasText(dto.getPassword())) {
             user.setPassword(passwordEncoder.encode(dto.getPassword()));
         }
-        user.setUpdateTime(LocalDateTime.now());
 
         userMapper.updateById(user);
         return convertToVO(user);
@@ -128,9 +127,9 @@ public class UserServiceImpl implements UserService {
         vo.setAvatar(user.getAvatar());
         vo.setDepartment(user.getDepartment());
         vo.setRole(user.getRole());
-        vo.setStatus(user.getStatus());
+        vo.setStatus(String.valueOf(user.getStatus() != null ? user.getStatus() : 1));
         vo.setLastLoginTime(user.getLastLoginTime());
-        vo.setCreateTime(user.getCreateTime());
+        vo.setCreatedAt(user.getCreatedAt());
         return vo;
     }
 }

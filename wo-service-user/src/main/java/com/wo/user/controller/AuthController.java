@@ -1,8 +1,8 @@
 package com.wo.user.controller;
 
-import com.wo.common.dto.LoginRequest;
-import com.wo.common.dto.LoginResponse;
-import com.wo.common.dto.UserCreateDTO;
+import com.wo.api.dto.user.LoginRequest;
+import com.wo.api.dto.user.LoginResponse;
+import com.wo.api.dto.user.UserCreateDTO;
 import com.wo.common.result.R;
 import com.wo.user.service.AuthService;
 import lombok.RequiredArgsConstructor;

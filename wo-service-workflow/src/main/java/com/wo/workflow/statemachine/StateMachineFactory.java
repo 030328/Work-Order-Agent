@@ -5,6 +5,7 @@ import com.wo.workflow.entity.WfDefinition;
 import com.wo.workflow.entity.WfTransition;
 import com.wo.workflow.mapper.TransitionMapper;
 import com.wo.workflow.mapper.WorkflowDefinitionMapper;
+import com.wo.workflow.statemachine.StateMachineBuilder.StateMachine;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

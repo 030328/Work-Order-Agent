@@ -1,6 +1,6 @@
 package com.wo.agent.feign;
 
-import com.wo.common.result.Result;
+import com.wo.common.result.R;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

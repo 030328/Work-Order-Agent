@@ -47,6 +47,10 @@ public class WorkOrderVO implements Serializable {
 
     private String aiSentiment;
 
+    private String aiCategorySuggestion;
+
+    private String aiSuggestedSolution;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

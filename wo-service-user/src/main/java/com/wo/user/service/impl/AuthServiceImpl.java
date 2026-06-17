@@ -1,8 +1,8 @@
 package com.wo.user.service.impl;
 
-import com.wo.common.dto.LoginRequest;
-import com.wo.common.dto.LoginResponse;
-import com.wo.common.dto.UserCreateDTO;
+import com.wo.api.dto.user.LoginRequest;
+import com.wo.api.dto.user.LoginResponse;
+import com.wo.api.dto.user.UserCreateDTO;
 import com.wo.common.enums.ErrorCode;
 import com.wo.common.exception.BizException;
 import com.wo.common.util.JwtUtil;
@@ -37,7 +37,7 @@ public class AuthServiceImpl implements AuthService {
 
         // Verify password
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
-            throw new BizException(ErrorCode.INVALID_PASSWORD);
+            throw new BizException(ErrorCode.USER_PASSWORD_ERROR);
         }
 
         // Update last login time
@@ -62,7 +62,7 @@ public class AuthServiceImpl implements AuthService {
         // Check if username already exists
         SysUser existingUser = userMapper.selectByUsername(dto.getUsername());
         if (existingUser != null) {
-            throw new BizException(ErrorCode.USERNAME_ALREADY_EXISTS);
+            throw new BizException(ErrorCode.USER_ALREADY_EXISTS);
         }
 
         // Create new user
@@ -75,8 +75,6 @@ public class AuthServiceImpl implements AuthService {
         user.setDepartment(dto.getDepartment());
         user.setRole(dto.getRole() != null ? dto.getRole() : "USER");
         user.setStatus(1);
-        user.setCreateTime(LocalDateTime.now());
-        user.setUpdateTime(LocalDateTime.now());
 
         // Save to database
         userMapper.insert(user);
@@ -102,7 +100,7 @@ public class AuthServiceImpl implements AuthService {
         String role = JwtUtil.getRole(token);
 
         if (userId == null || username == null) {
-            throw new BizException(ErrorCode.INVALID_TOKEN);
+            throw new BizException(ErrorCode.UNAUTHORIZED);
         }
 
         // Verify user still exists and is active

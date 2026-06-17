@@ -8,11 +8,20 @@ spring:
     nacos:
       discovery:
         server-addr: 192.168.213.100:8848
+      config:
+        server-addr: 192.168.213.100:8848
     sentinel:
       transport:
         dashboard: 192.168.213.100:8080
   config:
     import: optional:nacos:wo-gateway.yml
+
+nacos:
+  remote:
+    client:
+      grpc:
+        server:
+          ip: 192.168.213.100
 
 management:
   endpoints:

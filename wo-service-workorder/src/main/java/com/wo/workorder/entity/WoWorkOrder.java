@@ -90,4 +90,9 @@ public class WoWorkOrder extends BaseEntity {
      * AI分类建议
      */
     private String aiCategorySuggestion;
+
+    /**
+     * AI建议解决方案
+     */
+    private String aiSuggestedSolution;
 }

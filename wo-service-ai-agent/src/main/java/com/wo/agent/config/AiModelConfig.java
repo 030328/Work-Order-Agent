@@ -27,7 +27,7 @@ public class AiModelConfig {
     /**
      * 初始化时打印配置信息
      */
-    @org.annotation.PostConstruct
+    @jakarta.annotation.PostConstruct
     public void init() {
         log.info("AI Model Config - model: {}, maxTokens: {}, temperature: {}",
                 modelName, maxTokens, temperature);

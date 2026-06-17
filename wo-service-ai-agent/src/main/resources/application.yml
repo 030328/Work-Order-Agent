@@ -5,7 +5,7 @@ spring:
   application:
     name: wo-service-ai-agent
   datasource:
-    url: jdbc:mysql://192.168.213.100:3306/wo_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://192.168.213.100:3306/wo_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
     password: root123
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -17,39 +17,25 @@ spring:
     nacos:
       discovery:
         server-addr: 192.168.213.100:8848
-    ai:
-      dashscope:
-        api-key: ${DASHSCOPE_API_KEY:sk-placeholder}
+      config:
+        server-addr: 192.168.213.100:8848
   config:
     import: optional:nacos:wo-service-ai-agent.yml
 
-  ai:
-    mcp:
-      server:
-        enabled: true
-        transport: sse
-        name: workorder-agent
-        version: 1.0.0
+dashscope:
+  api-key: ${DASHSCOPE_API_KEY:sk-placeholder}
 
-milvus:
-  host: 192.168.213.100
-  port: 19530
-  collection: wo_knowledge_vectors
-
-rocketmq:
-  name-server: 192.168.213.100:9876
-  consumer:
-    group: ai-agent-consumer-group
+nacos:
+  remote:
+    client:
+      grpc:
+        server:
+          ip: 192.168.213.100
 
 agent:
   model: qwen-plus
-  max-tokens: 2000
+  max-tokens: 500
   temperature: 0.7
-  memory:
-    window-size: 20
-    summarize-threshold: 15
-  rag:
-    top-k: 5
 
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
