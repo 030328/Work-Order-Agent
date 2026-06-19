@@ -33,6 +33,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         // Permit health check endpoints
                         .requestMatchers("/actuator/**").permitAll()
+                        // Permit internal service calls (user info lookup)
+                        .requestMatchers("/api/users/**").permitAll()
                         // All other requests require authentication
                         .anyRequest().authenticated()
                 )

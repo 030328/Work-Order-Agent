@@ -11,17 +11,11 @@ import java.io.Serializable;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class KnowledgeSearchResult implements Serializable {
+public class WorkOrderAnalysisRequest implements Serializable {
 
-    private Long id;
-
+    private Long workOrderId;
     private String title;
-
-    private String content;
-
-    private String sourceType;
-
-    private String sourceId;
-
-    private Double score;
+    private String description;
+    private String category;
+    private String priority;
 }

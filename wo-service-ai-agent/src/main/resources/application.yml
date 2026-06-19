@@ -25,6 +25,11 @@ spring:
 dashscope:
   api-key: ${DASHSCOPE_API_KEY:sk-placeholder}
 
+milvus:
+  host: 192.168.213.100
+  port: 19530
+  collection: wo_knowledge_vectors
+
 nacos:
   remote:
     client:
