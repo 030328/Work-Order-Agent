@@ -31,11 +31,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
      * Whitelist paths that do not require JWT authentication.
      */
     private static final List<String> WHITELIST = Arrays.asList(
-            "/api/user/login",
-            "/api/user/register",
-            "/api/user/captcha",
-            "/api/user/reset-password",
-            "/api/workorder/public/**",
+            "/api/auth/login",
+            "/api/auth/register",
+            "/api/auth/refresh",
+            "/api/workorders/public/**",
             "/api/workflow/public/**",
             "/api/ai/public/**",
             "/actuator/**",

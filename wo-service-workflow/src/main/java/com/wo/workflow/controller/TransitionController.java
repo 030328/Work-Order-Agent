@@ -1,16 +1,14 @@
 package com.wo.workflow.controller;
 
+import com.wo.api.dto.workflow.TransitionRequest;
+import com.wo.api.dto.workflow.TransitionResult;
+import com.wo.common.result.R;
 import com.wo.workflow.service.WorkflowEngine;
-import com.wo.workflow.service.WorkflowEngine.TransitionRequest;
-import com.wo.workflow.service.WorkflowEngine.TransitionResult;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Map;
 
 /**
  * REST controller for executing and validating workflow transitions.
@@ -26,29 +24,21 @@ public class TransitionController {
      * Execute a state transition.
      */
     @PostMapping("/execute")
-    public ResponseEntity<TransitionResult> executeTransition(@RequestBody TransitionRequest request) {
+    public R<TransitionResult> executeTransition(@RequestBody TransitionRequest request) {
         TransitionResult result = workflowEngine.executeTransition(request);
-        if (result.isSuccess()) {
-            return ResponseEntity.ok(result);
-        }
-        return ResponseEntity.badRequest().body(result);
+        return Boolean.TRUE.equals(result.getSuccess()) ? R.ok(result) : R.fail(result.getMessage());
     }
 
     /**
      * Validate whether a transition is allowed.
      */
     @PostMapping("/validate")
-    public ResponseEntity<Map<String, Object>> validateTransition(@RequestBody Map<String, Object> request) {
-        Long definitionId = Long.valueOf(request.get("definitionId").toString());
-        String fromState = (String) request.get("fromState");
-        String toState = (String) request.get("toState");
-
-        boolean valid = workflowEngine.validateTransition(definitionId, fromState, toState);
-        return ResponseEntity.ok(Map.of(
-                "valid", valid,
-                "definitionId", definitionId,
-                "fromState", fromState,
-                "toState", toState
-        ));
+    public R<TransitionResult> validateTransition(@RequestBody TransitionRequest request) {
+        Long definitionId = request.getDefinitionId() != null ? request.getDefinitionId() : 1L;
+        boolean valid = workflowEngine.validateTransition(definitionId, request.getFromStatus(), request.getToStatus());
+        TransitionResult result = valid
+                ? TransitionResult.success(request.getFromStatus(), request.getToStatus())
+                : TransitionResult.failure(request.getFromStatus(), request.getToStatus(), "No matching transition found");
+        return valid ? R.ok(result) : R.fail(result.getMessage());
     }
 }

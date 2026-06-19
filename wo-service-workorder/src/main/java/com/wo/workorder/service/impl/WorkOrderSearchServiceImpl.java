@@ -8,7 +8,6 @@ import com.wo.workorder.service.WorkOrderSearchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.elasticsearch.core.ElasticsearchOperations;
-import org.springframework.data.elasticsearch.core.SearchHit;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
@@ -16,6 +15,9 @@ import org.springframework.data.elasticsearch.core.query.IndexQuery;
 import org.springframework.data.elasticsearch.core.query.IndexQueryBuilder;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -23,6 +25,8 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class WorkOrderSearchServiceImpl implements WorkOrderSearchService {
+
+    private static final DateTimeFormatter ES_DATE_TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final ElasticsearchOperations elasticsearchOperations;
 
@@ -46,7 +50,7 @@ public class WorkOrderSearchServiceImpl implements WorkOrderSearchService {
 
             return PageResult.of(hits.getTotalHits(), page, size, voList);
         } catch (Exception e) {
-            log.error("ES搜索失败, keyword={}", keyword, e);
+            log.error("Failed to search work orders in Elasticsearch, keyword={}", keyword, e);
             return PageResult.of(0, page, size, List.of());
         }
     }
@@ -60,9 +64,9 @@ public class WorkOrderSearchServiceImpl implements WorkOrderSearchService {
                     .withObject(doc)
                     .build();
             elasticsearchOperations.index(indexQuery, elasticsearchOperations.getIndexCoordinatesFor(WorkOrderDocument.class));
-            log.info("工单索引到ES成功, id={}", workOrder.getId());
+            log.info("Indexed work order to Elasticsearch, id={}", workOrder.getId());
         } catch (Exception e) {
-            log.error("工单索引到ES失败, id={}", workOrder.getId(), e);
+            log.error("Failed to index work order to Elasticsearch, id={}", workOrder.getId(), e);
         }
     }
 
@@ -70,9 +74,9 @@ public class WorkOrderSearchServiceImpl implements WorkOrderSearchService {
     public void deleteIndex(Long id) {
         try {
             elasticsearchOperations.delete(id.toString(), WorkOrderDocument.class);
-            log.info("ES索引删除成功, id={}", id);
+            log.info("Deleted work order Elasticsearch index, id={}", id);
         } catch (Exception e) {
-            log.error("ES索引删除失败, id={}", id, e);
+            log.error("Failed to delete work order Elasticsearch index, id={}", id, e);
         }
     }
 
@@ -89,7 +93,7 @@ public class WorkOrderSearchServiceImpl implements WorkOrderSearchService {
         doc.setAssigneeId(workOrder.getAssigneeId());
         doc.setTags(workOrder.getTags());
         doc.setResolution(workOrder.getResolution());
-        doc.setCreatedAt(workOrder.getCreatedAt());
+        doc.setCreatedAt(formatCreatedAt(workOrder.getCreatedAt()));
         return doc;
     }
 
@@ -101,7 +105,27 @@ public class WorkOrderSearchServiceImpl implements WorkOrderSearchService {
         vo.setCategory(doc.getCategory());
         vo.setPriority(doc.getPriority());
         vo.setStatus(doc.getStatus());
-        vo.setCreatedAt(doc.getCreatedAt());
+        vo.setCreatedAt(parseCreatedAt(doc.getCreatedAt()));
         return vo;
+    }
+
+    private String formatCreatedAt(LocalDateTime createdAt) {
+        return createdAt == null ? null : ES_DATE_TIME_FORMATTER.format(createdAt);
+    }
+
+    private LocalDateTime parseCreatedAt(String createdAt) {
+        if (createdAt == null || createdAt.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(createdAt, ES_DATE_TIME_FORMATTER);
+        } catch (Exception dateTimeException) {
+            try {
+                return LocalDate.parse(createdAt).atStartOfDay();
+            } catch (Exception dateException) {
+                log.warn("Failed to parse work order Elasticsearch createdAt={}", createdAt);
+                return null;
+            }
+        }
     }
 }

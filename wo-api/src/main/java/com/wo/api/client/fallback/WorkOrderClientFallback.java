@@ -53,6 +53,21 @@ public class WorkOrderClientFallback implements FallbackFactory<WorkOrderClient>
             public R<Void> addComment(Long workOrderId, CommentCreateDTO dto) {
                 return R.fail("工单服务不可用，请稍后重试");
             }
+
+            @Override
+            public R<Void> updateSlaDeadline(Long id, String deadline) {
+                return R.fail("工单服务不可用，请稍后重试");
+            }
+
+            @Override
+            public R<List<Long>> listSlaBreachedWorkOrderIds(String deadlineBefore) {
+                return R.fail("工单服务不可用，请稍后重试");
+            }
+
+            @Override
+            public R<Void> markSlaBreached(Long id) {
+                return R.fail("工单服务不可用，请稍后重试");
+            }
         };
     }
 }

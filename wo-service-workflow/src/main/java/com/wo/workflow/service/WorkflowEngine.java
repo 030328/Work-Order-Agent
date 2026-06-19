@@ -1,5 +1,7 @@
 package com.wo.workflow.service;
 
+import com.wo.api.dto.workflow.TransitionRequest;
+import com.wo.api.dto.workflow.TransitionResult;
 import com.wo.workflow.entity.WfTransition;
 
 import java.util.List;
@@ -36,43 +38,4 @@ public interface WorkflowEngine {
      */
     List<String> getAvailableTransitions(Long definitionId, String currentState);
 
-    /**
-     * Transition request DTO.
-     */
-    @lombok.Data
-    class TransitionRequest {
-        private Long workOrderId;
-        private Long definitionId;
-        private String fromState;
-        private String toState;
-        private String event;
-        private Long operatorId;
-        private String operatorRole;
-        private java.util.Map<String, Object> context;
-    }
-
-    /**
-     * Transition result DTO.
-     */
-    @lombok.Data
-    class TransitionResult {
-        private boolean success;
-        private String message;
-        private String newState;
-
-        public static TransitionResult success(String newState) {
-            TransitionResult result = new TransitionResult();
-            result.setSuccess(true);
-            result.setMessage("Transition executed successfully");
-            result.setNewState(newState);
-            return result;
-        }
-
-        public static TransitionResult failure(String message) {
-            TransitionResult result = new TransitionResult();
-            result.setSuccess(false);
-            result.setMessage(message);
-            return result;
-        }
-    }
 }

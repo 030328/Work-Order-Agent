@@ -1,6 +1,8 @@
 package com.wo.workflow.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.wo.api.client.WorkOrderClient;
+import com.wo.common.result.R;
 import com.wo.workflow.entity.WfSlaRule;
 import com.wo.workflow.mapper.SlaRuleMapper;
 import com.wo.workflow.service.SlaService;
@@ -11,6 +13,7 @@ import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Implementation of SLA service.
@@ -23,6 +26,7 @@ public class SlaServiceImpl implements SlaService {
 
     private final SlaRuleMapper slaRuleMapper;
     private final RocketMQTemplate rocketMQTemplate;
+    private final WorkOrderClient workOrderClient;
 
     @Override
     public void assignSla(Long workOrderId, String priority) {
@@ -39,9 +43,12 @@ public class SlaServiceImpl implements SlaService {
         log.info("Assigned SLA to workOrderId={}, priority={}, responseDeadline={}, resolveDeadline={}",
                 workOrderId, priority, responseDeadline, resolveDeadline);
 
-        // Update work order SLA deadlines via Feign client
-        // This would call wo-service-workorder to update the work order
-        // workOrderFeignClient.updateSlaDeadlines(workOrderId, responseDeadline, resolveDeadline);
+        R<Void> updateResult = workOrderClient.updateSlaDeadline(workOrderId, resolveDeadline.toString());
+        if (updateResult == null || updateResult.getCode() != 0) {
+            log.warn("Failed to update work order SLA deadline, workOrderId={}, message={}",
+                    workOrderId, updateResult != null ? updateResult.getMessage() : "empty response");
+            return;
+        }
 
         // Send notification about SLA assignment
         try {
@@ -60,11 +67,29 @@ public class SlaServiceImpl implements SlaService {
         log.debug("Checking SLA breaches...");
         LocalDateTime now = LocalDateTime.now();
 
-        // Query all active SLA rules
-        LambdaQueryWrapper<WfSlaRule> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(WfSlaRule::getIsActive, 1);
-        // In a real implementation, this would query work orders that have breached their SLA deadlines
-        // and send escalation notifications via RocketMQ
+        R<List<Long>> breachedResult = workOrderClient.listSlaBreachedWorkOrderIds(now.toString());
+        if (breachedResult == null || breachedResult.getCode() != 0 || breachedResult.getData() == null) {
+            log.warn("Failed to query SLA breached work orders: {}",
+                    breachedResult != null ? breachedResult.getMessage() : "empty response");
+            return;
+        }
+
+        for (Long workOrderId : breachedResult.getData()) {
+            try {
+                R<Void> markResult = workOrderClient.markSlaBreached(workOrderId);
+                if (markResult != null && markResult.getCode() == 0) {
+                    String topic = "sla-breach-topic";
+                    String payload = String.format("{\"workOrderId\":%d,\"breachedAt\":\"%s\"}", workOrderId, now);
+                    rocketMQTemplate.send(topic, MessageBuilder.withPayload(payload).build());
+                    log.info("SLA breach handled for workOrderId={}", workOrderId);
+                } else {
+                    log.warn("Failed to mark SLA breach, workOrderId={}, message={}",
+                            workOrderId, markResult != null ? markResult.getMessage() : "empty response");
+                }
+            } catch (Exception e) {
+                log.error("Failed to handle SLA breach, workOrderId={}", workOrderId, e);
+            }
+        }
 
         log.debug("SLA breach check completed at {}", now);
     }
@@ -79,5 +104,14 @@ public class SlaServiceImpl implements SlaService {
                 .eq(WfSlaRule::getIsActive, 1)
                 .last("LIMIT 1");
         return slaRuleMapper.selectOne(wrapper);
+    }
+
+    @Override
+    public LocalDateTime calculateResolveDeadline(String priority) {
+        WfSlaRule rule = getSlaRule(priority);
+        if (rule == null) {
+            return null;
+        }
+        return LocalDateTime.now().plusHours(rule.getResolveHours());
     }
 }

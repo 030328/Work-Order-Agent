@@ -2,6 +2,8 @@ package com.wo.workflow.service;
 
 import com.wo.workflow.entity.WfSlaRule;
 
+import java.time.LocalDateTime;
+
 /**
  * Service for SLA management.
  */
@@ -20,6 +22,11 @@ public interface SlaService {
      * Sends escalation notifications via RocketMQ for breached orders.
      */
     void checkSlaBreaches();
+
+    /**
+     * Calculate the resolve deadline for a priority without mutating work order data.
+     */
+    LocalDateTime calculateResolveDeadline(String priority);
 
     /**
      * Get the active SLA rule for a given priority level.

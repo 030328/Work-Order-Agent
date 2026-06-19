@@ -6,8 +6,6 @@ import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 
-import java.time.LocalDateTime;
-
 @Data
 @Document(indexName = "wo_work_order")
 public class WorkOrderDocument {
@@ -46,5 +44,5 @@ public class WorkOrderDocument {
     private String resolution;
 
     @Field(type = FieldType.Date)
-    private LocalDateTime createdAt;
+    private String createdAt;
 }

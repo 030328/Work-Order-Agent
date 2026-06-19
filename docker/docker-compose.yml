@@ -15,7 +15,7 @@ services:
       - ./mysql/init:/docker-entrypoint-initdb.d
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot123"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,8 +56,11 @@ services:
     container_name: wo-nacos
     ports:
       - "8848:8848"
+      - "9848:9848"
+      - "9849:9849"
     environment:
       MODE: standalone
+      NACOS_SERVER_IP: ${NACOS_SERVER_IP:-192.168.213.100}
 
   rocketmq-namesrv:
     image: apache/rocketmq:5.1.4
@@ -78,13 +81,34 @@ services:
     ports:
       - "10911:10911"
       - "10909:10909"
-    command: sh mqbroker -n rocketmq-namesrv:9876
+      - "10912:10912"
+    command: >
+      sh -c "{ echo brokerClusterName=DefaultCluster;
+      echo brokerName=broker-a;
+      echo brokerId=0;
+      echo brokerIP1=$${ROCKETMQ_BROKER_IP};
+      echo brokerIP2=$${ROCKETMQ_BROKER_IP};
+      echo listenPort=10911;
+      echo namesrvAddr=rocketmq-namesrv:9876;
+      echo autoCreateTopicEnable=true;
+      echo brokerRole=ASYNC_MASTER;
+      echo flushDiskType=ASYNC_FLUSH;
+      } > /tmp/broker.conf
+      && cat /tmp/broker.conf
+      && sh mqbroker -c /tmp/broker.conf"
     environment:
       JAVA_OPT_EXT: "-Xms256m -Xmx256m"
       NAMESRV_ADDR: "rocketmq-namesrv:9876"
+      ROCKETMQ_BROKER_IP: ${ROCKETMQ_BROKER_IP:-192.168.213.100}
     depends_on:
       rocketmq-namesrv:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/10911'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
 
   # ==================== Application Services ====================
   wo-gateway:
@@ -129,10 +153,11 @@ services:
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/wo_system?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
       SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_ELASTICSEARCH_URIS: http://elasticsearch:9200
+      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
       SPRING_CLOUD_NACOS_DISCOVERY_SERVER_ADDR: nacos:8848
       SPRING_CLOUD_NACOS_CONFIG_SERVER_ADDR: nacos:8848
       ROCKETMQ_NAME_SERVER: rocketmq-namesrv:9876
+      WORKORDER_EVENT_MQ_ENABLED: "true"
     depends_on:
       mysql:
         condition: service_healthy

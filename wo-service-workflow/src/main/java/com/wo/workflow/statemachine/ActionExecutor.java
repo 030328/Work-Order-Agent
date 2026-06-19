@@ -41,7 +41,11 @@ public class ActionExecutor {
         try {
             Method executeMethod = findExecuteMethod(bean.getClass());
             if (executeMethod != null) {
-                executeMethod.invoke(bean, context);
+                if (executeMethod.getParameterCount() == 0) {
+                    executeMethod.invoke(bean);
+                } else {
+                    executeMethod.invoke(bean, context);
+                }
                 log.info("Action '{}' executed successfully", actionBeanName);
             } else {
                 log.warn("No execute method found on action bean: {}", actionBeanName);

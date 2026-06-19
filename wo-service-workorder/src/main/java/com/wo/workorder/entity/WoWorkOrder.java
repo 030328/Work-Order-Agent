@@ -95,4 +95,14 @@ public class WoWorkOrder extends BaseEntity {
      * AI建议解决方案
      */
     private String aiSuggestedSolution;
+
+    /**
+     * 转人工时间
+     */
+    private LocalDateTime escalatedAt;
+
+    /**
+     * 认领时间
+     */
+    private LocalDateTime claimedAt;
 }

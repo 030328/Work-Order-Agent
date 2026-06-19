@@ -2,17 +2,19 @@ server:
   port: 8080
 
 spring:
+  main:
+    web-application-type: reactive
   application:
     name: wo-gateway
   cloud:
     nacos:
       discovery:
-        server-addr: 192.168.213.100:8848
+        server-addr: ${NACOS_SERVER_ADDR:192.168.213.100:8848}
       config:
-        server-addr: 192.168.213.100:8848
+        server-addr: ${NACOS_SERVER_ADDR:192.168.213.100:8848}
     sentinel:
       transport:
-        dashboard: 192.168.213.100:8080
+        dashboard: ${SENTINEL_DASHBOARD_ADDR:192.168.213.100:8858}
   config:
     import: optional:nacos:wo-gateway.yml
 
@@ -21,7 +23,7 @@ nacos:
     client:
       grpc:
         server:
-          ip: 192.168.213.100
+          ip: ${NACOS_REMOTE_GRPC_IP:192.168.213.100}
 
 management:
   endpoints:

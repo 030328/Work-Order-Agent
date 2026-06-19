@@ -6,6 +6,10 @@ import com.wo.api.dto.workorder.WorkOrderQueryDTO;
 import com.wo.api.dto.workorder.WorkOrderVO;
 import com.wo.common.result.PageResult;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+
 public interface WorkOrderService {
 
     /**
@@ -17,6 +21,11 @@ public interface WorkOrderService {
      * 分页查询工单
      */
     PageResult<WorkOrderBriefVO> queryWorkOrders(WorkOrderQueryDTO query);
+
+    /**
+     * 按状态统计工单数量
+     */
+    Map<String, Long> countWorkOrdersByStatus(WorkOrderQueryDTO query);
 
     /**
      * 创建工单
@@ -37,4 +46,44 @@ public interface WorkOrderService {
      * 添加AI摘要
      */
     void addAiSummary(Long id, String summary, String sentiment);
+
+    /**
+     * 用户确认工单完成
+     */
+    void confirmWorkOrder(Long id, Long userId);
+
+    /**
+     * AI 重新生成解决方案
+     */
+    WorkOrderVO regenerateSolution(Long id, Long userId);
+
+    /**
+     * 转人工处理
+     */
+    void escalateWorkOrder(Long id, Long userId);
+
+    /**
+     * 认领工单
+     */
+    void claimWorkOrder(Long id, Long userId);
+
+    /**
+     * 获取部门待处理工单
+     */
+    PageResult<WorkOrderBriefVO> getDepartmentWorkOrders(String department, int page, int size);
+
+    /**
+     * 更新 SLA 截止时间
+     */
+    void updateSlaDeadline(Long id, LocalDateTime deadline);
+
+    /**
+     * 查询已经超过 SLA 且仍需处理的工单 ID
+     */
+    List<Long> listSlaBreachedWorkOrderIds(LocalDateTime deadlineBefore);
+
+    /**
+     * 标记 SLA 超时并转入人工升级队列
+     */
+    void markSlaBreached(Long id);
 }

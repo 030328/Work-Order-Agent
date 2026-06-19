@@ -1,0 +1,333 @@
+<template>
+  <div v-if="workOrder" class="detail-page">
+    <section class="summary-panel">
+      <div>
+        <div class="order-number">{{ workOrder.orderNo }}</div>
+        <h3>{{ workOrder.title }}</h3>
+        <p>{{ workOrder.description }}</p>
+      </div>
+      <div class="status-stack">
+        <el-tag :type="getStatusType(workOrder.status)" size="large">{{ getStatusLabel(workOrder.status) }}</el-tag>
+        <el-tag :type="getPriorityType(workOrder.priority)" size="large">{{ getPriorityLabel(workOrder.priority) }}</el-tag>
+      </div>
+    </section>
+
+    <div class="detail-grid">
+      <section class="info-panel">
+        <div class="panel-title">工单信息</div>
+        <el-descriptions :column="2" border>
+          <el-descriptions-item label="分类">{{ workOrder.category }}</el-descriptions-item>
+          <el-descriptions-item label="部门">{{ workOrder.department || '未分配' }}</el-descriptions-item>
+          <el-descriptions-item label="创建人">{{ workOrder.creatorName || workOrder.creatorId || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="处理人">{{ assigneeText }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ workOrder.createdAt }}</el-descriptions-item>
+          <el-descriptions-item label="SLA 截止">{{ workOrder.slaDeadline || '未分配' }}</el-descriptions-item>
+          <el-descriptions-item label="解决时间">{{ workOrder.resolvedAt || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="关闭时间">{{ workOrder.closedAt || '-' }}</el-descriptions-item>
+        </el-descriptions>
+      </section>
+
+      <section class="action-panel">
+        <div class="panel-title">处理动作</div>
+        <p class="action-hint">{{ actionHint }}</p>
+        <div class="action-buttons">
+          <el-button v-if="canCompleteAiOrder" type="success" @click="handleConfirm">处理完成</el-button>
+          <el-button v-if="canEscalateToManual" type="danger" @click="handleEscalate">转人工处理</el-button>
+          <el-button v-if="canClaim" type="primary" @click="handleClaim">认领工单</el-button>
+          <el-button v-if="canSubmitResolution" type="success" @click="resolutionVisible = true">提交处理意见</el-button>
+          <el-button v-if="canConfirmManualResult" type="success" @click="handleConfirm">确认完成</el-button>
+          <el-button @click="loadData">刷新</el-button>
+        </div>
+      </section>
+    </div>
+
+    <section class="ai-panel">
+      <div class="panel-title">AI 分析结果</div>
+      <div v-if="workOrder.aiSummary" class="ai-grid">
+        <div class="ai-item">
+          <span>摘要</span>
+          <p>{{ workOrder.aiSummary }}</p>
+        </div>
+        <div class="ai-item">
+          <span>情绪</span>
+          <el-tag :type="workOrder.aiSentiment === 'NEGATIVE' ? 'danger' : workOrder.aiSentiment === 'POSITIVE' ? 'success' : 'info'">
+            {{ workOrder.aiSentiment }}
+          </el-tag>
+        </div>
+        <div class="ai-item">
+          <span>建议分类</span>
+          <p>{{ workOrder.aiCategorySuggestion || '-' }}</p>
+        </div>
+        <div class="ai-item solution">
+          <span>建议方案</span>
+          <p>{{ workOrder.aiSuggestedSolution || '暂无建议' }}</p>
+        </div>
+      </div>
+      <el-empty v-else description="暂无 AI 分析结果" />
+    </section>
+
+    <el-dialog v-model="resolutionVisible" title="提交处理意见" width="520px">
+      <el-form label-position="top">
+        <el-form-item label="处理意见">
+          <el-input
+            v-model="resolutionComment"
+            type="textarea"
+            :rows="5"
+            maxlength="500"
+            show-word-limit
+            placeholder="请填写故障原因、处理过程或最终解决方案"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="resolutionVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!resolutionComment.trim()" @click="handleResolve">提交并标记已解决</el-button>
+      </template>
+    </el-dialog>
+  </div>
+
+  <el-empty v-else description="正在加载工单" />
+</template>
+
+<script setup>
+import { computed, onMounted, ref } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { getWorkOrder, confirmWorkOrder, escalateWorkOrder, claimWorkOrder, updateStatus } from '../api'
+
+const route = useRoute()
+const workOrder = ref(null)
+const resolutionVisible = ref(false)
+const resolutionComment = ref('')
+const currentUserId = localStorage.getItem('userId')
+const currentRole = localStorage.getItem('role') || 'USER'
+const canHandleManualWork = computed(() => ['ADMIN', 'MANAGER', 'AGENT'].includes(currentRole))
+const isCreator = computed(() => workOrder.value?.creatorId && String(workOrder.value.creatorId) === String(currentUserId))
+
+const canClaim = computed(() => workOrder.value?.status === 'ESCALATED' && canHandleManualWork.value)
+const canCompleteAiOrder = computed(() => workOrder.value?.status === 'AI_SOLVED' && isCreator.value)
+const canEscalateToManual = computed(() => workOrder.value?.status === 'AI_SOLVED' && isCreator.value)
+const canConfirmManualResult = computed(() => workOrder.value?.status === 'RESOLVED' && isCreator.value)
+
+const assigneeText = computed(() => {
+  if (!workOrder.value?.assigneeId) {
+    return '未分配'
+  }
+  return workOrder.value.assigneeName || `用户#${workOrder.value.assigneeId}`
+})
+
+const loadData = async () => {
+  try {
+    const res = await getWorkOrder(route.params.id)
+    if (res.code === 0) {
+      workOrder.value = res.data
+    } else {
+      ElMessage.error(res.message)
+    }
+  } catch (e) {
+    ElMessage.error('工单加载失败')
+  }
+}
+
+const canSubmitResolution = computed(() => {
+  if (workOrder.value?.status !== 'IN_PROGRESS') {
+    return false
+  }
+  return canHandleManualWork.value && (['ADMIN', 'MANAGER'].includes(currentRole) || String(workOrder.value.assigneeId) === String(currentUserId))
+})
+
+const actionHint = computed(() => {
+  const status = workOrder.value?.status
+  if (status === 'AI_SOLVED') return isCreator.value ? 'AI 已给出处理建议，请选择处理完成或转人工处理。' : 'AI 已给出处理建议，等待创建人确认或转人工处理。'
+  if (status === 'ESCALATED') return canHandleManualWork.value ? '该工单已进入人工处理队列，处理人可以认领。' : '该工单已进入人工处理队列，需要处理人员、部门经理或管理员认领。'
+  if (status === 'IN_PROGRESS') return canSubmitResolution.value ? '该工单正在处理中，请填写处理意见后标记为已解决。' : '该工单已被处理人认领，等待处理结果。'
+  if (status === 'RESOLVED') return isCreator.value ? '处理人已提交解决结果，请确认工单完成。' : '处理人已提交解决结果，等待创建人确认。'
+  if (status === 'OPEN') return '工单已创建，等待 AI 给出处理建议。'
+  return '当前状态暂无必须处理的动作。'
+})
+
+const getStatusType = (status) => {
+  const map = { OPEN: 'info', AI_SOLVED: 'success', ESCALATED: 'warning', IN_PROGRESS: 'primary', RESOLVED: 'success', CLOSED: '' }
+  return map[status] || 'info'
+}
+
+const getStatusLabel = (status) => {
+  const map = { OPEN: '待处理', AI_ANALYZING: 'AI分析中', AI_SOLVED: 'AI已处理', ESCALATED: '已转人工', IN_PROGRESS: '处理中', RESOLVED: '已解决', CLOSED: '已关闭' }
+  return map[status] || status
+}
+
+const getPriorityType = (priority) => {
+  const map = { URGENT: 'danger', HIGH: 'warning', MEDIUM: 'primary', LOW: 'info' }
+  return map[priority] || 'info'
+}
+
+const getPriorityLabel = (priority) => {
+  const map = { URGENT: '紧急', HIGH: '高优先级', MEDIUM: '中优先级', LOW: '低优先级' }
+  return map[priority] || priority
+}
+
+const handleConfirm = async () => {
+  await ElMessageBox.confirm('确认该工单处理完成并关闭？', '确认')
+  const res = await confirmWorkOrder(route.params.id)
+  if (res.code === 0) {
+    ElMessage.success('工单已确认完成')
+    loadData()
+  } else {
+    ElMessage.error(res.message)
+  }
+}
+
+const handleEscalate = async () => {
+  await ElMessageBox.confirm('AI 建议未解决问题，确认转人工处理？', '确认')
+  const res = await escalateWorkOrder(route.params.id)
+  if (res.code === 0) {
+    ElMessage.success('已转人工处理')
+    loadData()
+  } else {
+    ElMessage.error(res.message)
+  }
+}
+
+const handleClaim = async () => {
+  await ElMessageBox.confirm('认领此工单？', '确认')
+  const res = await claimWorkOrder(route.params.id)
+  if (res.code === 0) {
+    ElMessage.success('认领成功')
+    loadData()
+  }
+}
+
+const handleResolve = async () => {
+  const res = await updateStatus(route.params.id, 'RESOLVED', resolutionComment.value.trim())
+  if (res.code === 0) {
+    ElMessage.success('处理意见已提交')
+    resolutionVisible.value = false
+    resolutionComment.value = ''
+    loadData()
+  } else {
+    ElMessage.error(res.message)
+  }
+}
+
+onMounted(loadData)
+</script>
+
+<style scoped>
+.detail-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summary-panel,
+.info-panel,
+.action-panel,
+.ai-panel {
+  background: #fff;
+  border: 1px solid #e7eaf0;
+  border-radius: 8px;
+}
+
+.summary-panel {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px;
+}
+
+.order-number {
+  color: #409eff;
+  font-weight: 700;
+}
+
+.summary-panel h3 {
+  margin: 8px 0;
+  color: #111827;
+  font-size: 22px;
+}
+
+.summary-panel p {
+  margin: 0;
+  color: #4b5563;
+  line-height: 1.7;
+}
+
+.status-stack {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+}
+
+.info-panel,
+.action-panel,
+.ai-panel {
+  padding: 18px;
+}
+
+.panel-title {
+  margin-bottom: 14px;
+  color: #1f2937;
+  font-weight: 700;
+}
+
+.action-hint {
+  color: #6b7280;
+  line-height: 1.7;
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.ai-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.ai-item {
+  padding: 14px;
+  background: #f8fafc;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.ai-item span {
+  color: #7b8794;
+  font-size: 12px;
+}
+
+.ai-item p {
+  margin: 8px 0 0;
+  color: #1f2937;
+  line-height: 1.7;
+}
+
+.solution {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 1000px) {
+  .summary-panel,
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-panel {
+    flex-direction: column;
+  }
+
+  .ai-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

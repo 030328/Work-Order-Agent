@@ -10,10 +10,13 @@ import org.springframework.web.bind.annotation.*;
 @FeignClient(name = "wo-service-workflow", fallbackFactory = WorkflowClientFallback.class)
 public interface WorkflowClient {
 
-    @PostMapping("/api/workflow/transitions")
+    @PostMapping("/api/workflow/transitions/execute")
     R<TransitionResult> executeTransition(@RequestBody TransitionRequest request);
 
-    @GetMapping("/api/workflow/transitions/validate")
-    R<Void> validateTransition(@RequestParam("workOrderId") Long workOrderId,
-                               @RequestParam("targetStatus") String targetStatus);
+    @PostMapping("/api/workflow/sla/assign")
+    R<Void> assignSla(@RequestParam("workOrderId") Long workOrderId,
+                      @RequestParam("priority") String priority);
+
+    @GetMapping("/api/workflow/sla/deadline")
+    R<String> calculateSlaDeadline(@RequestParam("priority") String priority);
 }

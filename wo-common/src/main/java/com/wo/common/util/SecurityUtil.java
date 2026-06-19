@@ -22,6 +22,12 @@ public class SecurityUtil {
         return request.getHeader(CommonConstant.USERNAME_HEADER);
     }
 
+    public static String getCurrentRole() {
+        HttpServletRequest request = getRequest();
+        if (request == null) return null;
+        return request.getHeader(CommonConstant.ROLE_HEADER);
+    }
+
     public static String getToken() {
         HttpServletRequest request = getRequest();
         if (request == null) return null;

@@ -51,6 +51,10 @@ public class WorkOrderVO implements Serializable {
 
     private String aiSuggestedSolution;
 
+    private LocalDateTime escalatedAt;
+
+    private LocalDateTime claimedAt;
+
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;

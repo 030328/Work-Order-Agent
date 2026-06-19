@@ -1,6 +1,8 @@
 package com.wo.workflow.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.wo.api.dto.workflow.TransitionRequest;
+import com.wo.api.dto.workflow.TransitionResult;
 import com.wo.workflow.entity.WfDefinition;
 import com.wo.workflow.entity.WfTransition;
 import com.wo.workflow.mapper.TransitionMapper;
@@ -33,20 +35,19 @@ public class WorkflowEngineImpl implements WorkflowEngine {
 
     @Override
     public TransitionResult executeTransition(TransitionRequest request) {
-        log.info("Executing transition for workOrderId={}, fromState={}, toState={}, event={}",
-                request.getWorkOrderId(), request.getFromState(), request.getToState(), request.getEvent());
+        log.info("Executing transition for workOrderId={}, fromStatus={}, toStatus={}, event={}",
+                request.getWorkOrderId(), request.getFromStatus(), request.getToStatus(), request.getEvent());
 
-        // Load the workflow definition
-        WfDefinition definition = definitionMapper.selectById(request.getDefinitionId());
+        WfDefinition definition = loadDefinition(request.getDefinitionId());
         if (definition == null || definition.getStatus() != 1) {
-            return TransitionResult.failure("Workflow definition not found or inactive");
+            return TransitionResult.failure(request.getFromStatus(), request.getToStatus(),
+                    "Workflow definition not found or inactive");
         }
 
-        // Find the matching transition
         LambdaQueryWrapper<WfTransition> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(WfTransition::getDefinitionId, request.getDefinitionId())
-                .eq(WfTransition::getFromState, request.getFromState())
-                .eq(WfTransition::getToState, request.getToState())
+        wrapper.eq(WfTransition::getDefinitionId, definition.getId())
+                .eq(WfTransition::getFromState, request.getFromStatus())
+                .eq(WfTransition::getToState, request.getToStatus())
                 .orderByAsc(WfTransition::getSortOrder);
         List<WfTransition> transitions = transitionMapper.selectList(wrapper);
 
@@ -56,46 +57,52 @@ public class WorkflowEngineImpl implements WorkflowEngine {
                 .orElse(null);
 
         if (matchedTransition == null) {
-            return TransitionResult.failure("No matching transition found from " + request.getFromState() + " to " + request.getToState());
+            return TransitionResult.failure(request.getFromStatus(), request.getToStatus(),
+                    "No matching transition found from " + request.getFromStatus() + " to " + request.getToStatus());
         }
 
         // Evaluate guard condition
         if (matchedTransition.getGuardCondition() != null && !matchedTransition.getGuardCondition().isEmpty()) {
-            Map<String, Object> context = request.getContext() != null ? request.getContext() : new java.util.HashMap<>();
+            Map<String, Object> context = new java.util.HashMap<>();
             context.put("workOrderId", request.getWorkOrderId());
             context.put("operatorId", request.getOperatorId());
             context.put("operatorRole", request.getOperatorRole());
+            context.put("fromStatus", request.getFromStatus());
+            context.put("toStatus", request.getToStatus());
 
             boolean guardPassed = guardEvaluator.evaluate(matchedTransition.getGuardCondition(), context);
             if (!guardPassed) {
-                return TransitionResult.failure("Guard condition not met: " + matchedTransition.getGuardCondition());
+                return TransitionResult.failure(request.getFromStatus(), request.getToStatus(),
+                        "Guard condition not met: " + matchedTransition.getGuardCondition());
             }
         }
 
         // Validate required role
         if (matchedTransition.getRequiredRole() != null && !matchedTransition.getRequiredRole().isEmpty()) {
-            if (request.getOperatorRole() == null || !matchedTransition.getRequiredRole().equals(request.getOperatorRole())) {
-                return TransitionResult.failure("Required role not satisfied: " + matchedTransition.getRequiredRole());
+            if (!hasRequiredRole(request.getOperatorRole(), matchedTransition.getRequiredRole())) {
+                return TransitionResult.failure(request.getFromStatus(), request.getToStatus(),
+                        "Required role not satisfied: " + matchedTransition.getRequiredRole());
             }
         }
 
         // Execute action if specified
         if (matchedTransition.getActionClass() != null && !matchedTransition.getActionClass().isEmpty()) {
             try {
-                Map<String, Object> context = request.getContext() != null ? request.getContext() : new java.util.HashMap<>();
+                Map<String, Object> context = new java.util.HashMap<>();
                 context.put("workOrderId", request.getWorkOrderId());
-                context.put("fromState", request.getFromState());
-                context.put("toState", request.getToState());
+                context.put("fromState", request.getFromStatus());
+                context.put("toState", request.getToStatus());
                 context.put("operatorId", request.getOperatorId());
                 actionExecutor.execute(matchedTransition.getActionClass(), context);
             } catch (Exception e) {
                 log.error("Action execution failed for transition: {}", matchedTransition.getActionClass(), e);
-                return TransitionResult.failure("Action execution failed: " + e.getMessage());
+                return TransitionResult.failure(request.getFromStatus(), request.getToStatus(),
+                        "Action execution failed: " + e.getMessage());
             }
         }
 
-        log.info("Transition executed successfully for workOrderId={}, newState={}", request.getWorkOrderId(), request.getToState());
-        return TransitionResult.success(request.getToState());
+        log.info("Transition executed successfully for workOrderId={}, newState={}", request.getWorkOrderId(), request.getToStatus());
+        return TransitionResult.success(request.getFromStatus(), request.getToStatus());
     }
 
     @Override
@@ -118,5 +125,34 @@ public class WorkflowEngineImpl implements WorkflowEngine {
                 .map(WfTransition::getToState)
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    private WfDefinition loadDefinition(Long definitionId) {
+        if (definitionId != null) {
+            return definitionMapper.selectById(definitionId);
+        }
+
+        LambdaQueryWrapper<WfDefinition> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WfDefinition::getStatus, 1)
+                .orderByDesc(WfDefinition::getVersion)
+                .last("LIMIT 1");
+        return definitionMapper.selectOne(wrapper);
+    }
+
+    private boolean hasRequiredRole(String operatorRole, String requiredRole) {
+        if (operatorRole == null || operatorRole.isEmpty()) {
+            return false;
+        }
+        return roleLevel(operatorRole) >= roleLevel(requiredRole);
+    }
+
+    private int roleLevel(String role) {
+        return switch (role) {
+            case "ADMIN" -> 4;
+            case "MANAGER" -> 3;
+            case "AGENT" -> 2;
+            case "USER" -> 1;
+            default -> 0;
+        };
     }
 }

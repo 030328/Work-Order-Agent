@@ -23,7 +23,12 @@ public class WorkflowClientFallback implements FallbackFactory<WorkflowClient> {
             }
 
             @Override
-            public R<Void> validateTransition(Long workOrderId, String targetStatus) {
+            public R<Void> assignSla(Long workOrderId, String priority) {
+                return R.fail("工作流服务不可用，请稍后重试");
+            }
+
+            @Override
+            public R<String> calculateSlaDeadline(String priority) {
                 return R.fail("工作流服务不可用，请稍后重试");
             }
         };
