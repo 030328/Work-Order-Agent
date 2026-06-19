@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -33,8 +34,8 @@ public class RagService {
             return List.of();
         }
 
-        // 2. Search Milvus
-        List<Map<String, Object>> results = milvusClient.search(queryVector, topK);
+        // 2. Search Milvus (多取一些，后面排序)
+        List<Map<String, Object>> results = milvusClient.search(queryVector, topK * 2);
         if (results.isEmpty()) {
             log.info("No similar documents found");
             return List.of();
@@ -49,26 +50,48 @@ public class RagService {
                     .sourceType((String) result.get("source_type"))
                     .sourceId((String) result.get("source_id"))
                     .score(result.get("score") != null ? ((Number) result.get("score")).doubleValue() : 0.0)
+                    .verified(result.get("verified") != null ? ((Number) result.get("verified")).intValue() : 0)
+                    .likeCount(result.get("like_count") != null ? ((Number) result.get("like_count")).intValue() : 0)
                     .build();
             searchResults.add(item);
         }
 
-        log.info("RAG retrieved {} results", searchResults.size());
-        return searchResults;
+        // 4. 排序：verified=1 优先，然后按 score 降序，再按 likeCount 降序
+        searchResults.sort(Comparator
+                .comparingInt(KnowledgeSearchResult::getVerified).reversed()
+                .thenComparingDouble(KnowledgeSearchResult::getScore).reversed()
+                .thenComparingInt(KnowledgeSearchResult::getLikeCount).reversed());
+
+        // 5. 取 topK
+        List<KnowledgeSearchResult> topResults = searchResults.size() > topK
+                ? searchResults.subList(0, topK)
+                : searchResults;
+
+        log.info("RAG retrieved {} results (sorted by verified + score + likes)", topResults.size());
+        return topResults;
     }
 
     public void index(String content, String sourceType, String sourceId) {
-        log.info("Indexing document: sourceType={}, sourceId={}", sourceType, sourceId);
+        index(content, sourceType, sourceId, 0, 0);
+    }
+
+    public void index(String content, String sourceType, String sourceId, int verified, int likeCount) {
+        log.info("=== RAG Index Start ===");
+        log.info("Content length: {}", content.length());
+        log.info("SourceType: {}, SourceId: {}, Verified: {}, LikeCount: {}", sourceType, sourceId, verified, likeCount);
 
         // 1. Embed the content
+        log.info("Step 1: Embedding content...");
         float[] vector = embeddingService.embed(content);
         if (vector == null) {
-            log.error("Failed to embed content, skip indexing");
+            log.error("Step 1 FAILED: Embedding returned null, skip indexing");
             return;
         }
+        log.info("Step 1 SUCCESS: Vector dimension={}", vector.length);
 
         // 2. Insert into Milvus
-        milvusClient.insert(content, vector, sourceType, sourceId);
-        log.info("Document indexed successfully");
+        log.info("Step 2: Inserting into Milvus...");
+        milvusClient.insert(content, vector, sourceType, sourceId, verified, likeCount);
+        log.info("=== RAG Index Complete ===");
     }
 }

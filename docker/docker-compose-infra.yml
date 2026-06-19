@@ -89,6 +89,26 @@ services:
       rocketmq-namesrv:
         condition: service_started
 
+  # ==================== Elasticsearch ====================
+  elasticsearch:
+    image: elasticsearch:8.12.0
+    container_name: wo-elasticsearch
+    restart: always
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
   # ==================== Milvus ====================
   milvus-etcd:
     image: registry.cn-hangzhou.aliyuncs.com/google_containers/etcd:3.5.5-0
@@ -149,6 +169,7 @@ services:
 volumes:
   mysql-data:
   redis-data:
+  es-data:
   nacos-data:
   milvus-data:
   milvus-etcd-data:

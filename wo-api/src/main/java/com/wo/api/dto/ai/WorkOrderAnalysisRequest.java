@@ -6,6 +6,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.io.Serializable;
+import java.util.List;
 
 @Data
 @Builder
@@ -18,4 +19,22 @@ public class WorkOrderAnalysisRequest implements Serializable {
     private String description;
     private String category;
     private String priority;
+
+    /**
+     * ES 检索的相似历史工单（workorder 服务传过来）
+     */
+    private List<SimilarWorkOrder> similarWorkOrders;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class SimilarWorkOrder implements Serializable {
+        private Long id;
+        private String orderNo;
+        private String title;
+        private String description;
+        private String resolution;
+        private String status;
+    }
 }

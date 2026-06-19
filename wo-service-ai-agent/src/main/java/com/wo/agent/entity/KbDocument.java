@@ -49,6 +49,16 @@ public class KbDocument extends BaseEntity {
     private Integer status = 1;
 
     /**
+     * 是否人工验证：0-AI自动生成, 1-人工确认正确
+     */
+    private Integer verified = 0;
+
+    /**
+     * 点赞数
+     */
+    private Integer likeCount = 0;
+
+    /**
      * 创建人ID
      */
     private Long createdBy;

@@ -110,16 +110,22 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         // 索引到ES
         workOrderSearchService.indexWorkOrder(workOrder);
 
-        // 异步调用AI分析
+        // 调用AI分析（包含 ES 相似工单检索）
         try {
+            // 1. 从 ES 检索相似历史工单
+            List<WorkOrderAnalysisRequest.SimilarWorkOrder> similarOrders = findSimilarWorkOrders(workOrder);
+
+            // 2. 构建请求
             WorkOrderAnalysisRequest analysisRequest = WorkOrderAnalysisRequest.builder()
                     .workOrderId(workOrder.getId())
                     .title(workOrder.getTitle())
                     .description(workOrder.getDescription())
                     .category(workOrder.getCategory())
                     .priority(workOrder.getPriority())
+                    .similarWorkOrders(similarOrders)
                     .build();
 
+            // 3. 调用 AI Agent
             R<WorkOrderAnalysisResult> analysisResult = aiAgentClient.analyzeWorkOrder(analysisRequest);
             if (analysisResult != null && analysisResult.getData() != null) {
                 WorkOrderAnalysisResult aiResult = analysisResult.getData();
@@ -267,6 +273,40 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         record.setComment(comment);
         record.setIsSystem(isSystem);
         flowRecordMapper.insert(record);
+    }
+
+    /**
+     * 从 ES 检索相似历史工单（Top 5）
+     */
+    private List<WorkOrderAnalysisRequest.SimilarWorkOrder> findSimilarWorkOrders(WoWorkOrder workOrder) {
+        try {
+            String keyword = workOrder.getTitle();
+            PageResult<WorkOrderBriefVO> searchResult = workOrderSearchService.search(keyword, 1, 5);
+
+            if (searchResult.getRecords() == null || searchResult.getRecords().isEmpty()) {
+                return List.of();
+            }
+
+            return searchResult.getRecords().stream()
+                    .filter(vo -> !vo.getId().equals(workOrder.getId())) // 排除自己
+                    .map(vo -> {
+                        // 获取完整工单信息（包含 resolution）
+                        WoWorkOrder wo = workOrderMapper.selectById(vo.getId());
+                        return WorkOrderAnalysisRequest.SimilarWorkOrder.builder()
+                                .id(vo.getId())
+                                .orderNo(vo.getOrderNo())
+                                .title(vo.getTitle())
+                                .description(wo != null ? wo.getDescription() : "")
+                                .resolution(wo != null ? wo.getResolution() : "")
+                                .status(vo.getStatus())
+                                .build();
+                    })
+                    .limit(5)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("ES检索相似工单失败", e);
+            return List.of();
+        }
     }
 
     /**

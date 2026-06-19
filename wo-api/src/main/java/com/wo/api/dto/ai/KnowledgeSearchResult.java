@@ -24,4 +24,8 @@ public class KnowledgeSearchResult implements Serializable {
     private String sourceId;
 
     private Double score;
+
+    private Integer verified;
+
+    private Integer likeCount;
 }
