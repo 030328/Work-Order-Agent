@@ -5,6 +5,7 @@ import com.wo.api.dto.user.LoginResponse;
 import com.wo.api.dto.user.UserCreateDTO;
 import com.wo.common.result.R;
 import com.wo.user.service.AuthService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -22,7 +23,7 @@ public class AuthController {
      * User login
      */
     @PostMapping("/login")
-    public R<LoginResponse> login(@RequestBody LoginRequest request) {
+    public R<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
         LoginResponse response = authService.login(request);
         return R.ok(response);
     }
@@ -31,7 +32,7 @@ public class AuthController {
      * User registration
      */
     @PostMapping("/register")
-    public R<LoginResponse> register(@RequestBody UserCreateDTO dto) {
+    public R<LoginResponse> register(@Valid @RequestBody UserCreateDTO dto) {
         LoginResponse response = authService.register(dto);
         return R.ok(response);
     }

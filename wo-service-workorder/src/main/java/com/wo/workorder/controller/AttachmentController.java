@@ -1,53 +1,49 @@
 package com.wo.workorder.controller;
 
+import com.wo.api.dto.workorder.AttachmentCreateDTO;
+import com.wo.api.dto.workorder.AttachmentVO;
 import com.wo.common.result.R;
-import com.wo.workorder.entity.WoAttachment;
-import com.wo.workorder.mapper.AttachmentMapper;
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.wo.common.util.SecurityUtil;
+import com.wo.workorder.service.AttachmentService;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
-@Slf4j
 @RestController
 @RequestMapping("/api/workorders/{workOrderId}/attachments")
 @RequiredArgsConstructor
+@Validated
 public class AttachmentController {
 
-    private final AttachmentMapper attachmentMapper;
+    private final AttachmentService attachmentService;
 
-    /**
-     * 上传附件（占位实现）
-     */
     @PostMapping
-    public R<WoAttachment> upload(@PathVariable Long workOrderId,
+    public R<AttachmentVO> upload(@PathVariable @Positive Long workOrderId,
                                   @RequestParam("file") MultipartFile file) {
-        log.info("收到附件上传请求, workOrderId={}, fileName={}", workOrderId, file.getOriginalFilename());
-
-        // TODO: 实现文件上传到OSS/MinIO
-        WoAttachment attachment = new WoAttachment();
-        attachment.setWorkOrderId(workOrderId);
-        attachment.setFileName(file.getOriginalFilename());
-        attachment.setFileSize(file.getSize());
-        attachment.setFileType(file.getContentType());
-        attachment.setFileUrl("placeholder-url");
-
-        attachmentMapper.insert(attachment);
-        return R.ok(attachment);
+        Long uploaderId = SecurityUtil.requireCurrentUserId();
+        return R.ok(attachmentService.uploadAttachment(workOrderId, file, uploaderId));
     }
 
-    /**
-     * 获取工单附件列表
-     */
+    @PostMapping("/metadata")
+    public R<AttachmentVO> createMetadata(@PathVariable @Positive Long workOrderId,
+                                          @Valid @RequestBody AttachmentCreateDTO dto) {
+        Long uploaderId = SecurityUtil.requireCurrentUserId();
+        return R.ok(attachmentService.createAttachment(workOrderId, dto, uploaderId));
+    }
+
     @GetMapping
-    public R<List<WoAttachment>> list(@PathVariable Long workOrderId) {
-        LambdaQueryWrapper<WoAttachment> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(WoAttachment::getWorkOrderId, workOrderId)
-                .orderByDesc(WoAttachment::getCreatedAt);
-        List<WoAttachment> attachments = attachmentMapper.selectList(wrapper);
-        return R.ok(attachments);
+    public R<List<AttachmentVO>> list(@PathVariable @Positive Long workOrderId) {
+        return R.ok(attachmentService.listAttachments(workOrderId));
     }
 }

@@ -6,6 +6,7 @@ import com.wo.common.result.PageResult;
 import com.wo.common.result.R;
 import com.wo.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -19,8 +20,16 @@ public class UserController {
      * Get user by ID
      */
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','SYSTEM') or #id.toString() == authentication.name")
     public R<UserVO> getUserById(@PathVariable Long id) {
         UserVO user = userService.getUserById(id);
+        return R.ok(user);
+    }
+
+    @GetMapping("/by-username/{username}")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','SYSTEM')")
+    public R<UserVO> getUserByUsername(@PathVariable String username) {
+        UserVO user = userService.getUserByUsername(username);
         return R.ok(user);
     }
 
@@ -28,6 +37,7 @@ public class UserController {
      * List users with pagination and optional filters
      */
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER','SYSTEM')")
     public R<PageResult<UserVO>> listUsers(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -41,6 +51,7 @@ public class UserController {
      * Update user information
      */
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public R<UserVO> updateUser(@PathVariable Long id, @RequestBody UserCreateDTO dto) {
         UserVO user = userService.updateUser(id, dto);
         return R.ok(user);
@@ -50,6 +61,7 @@ public class UserController {
      * Delete user by ID
      */
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
     public R<Void> deleteUser(@PathVariable Long id) {
         userService.deleteUser(id);
         return R.ok();

@@ -1,0 +1,24 @@
+USE wo_system;
+SET NAMES utf8mb4;
+
+ALTER TABLE wo_work_order
+    ADD COLUMN ai_suggested_solution TEXT AFTER ai_category_suggestion,
+    ADD COLUMN escalated_at DATETIME AFTER ai_suggested_solution,
+    ADD COLUMN claimed_at DATETIME AFTER escalated_at;
+
+ALTER TABLE kb_document
+    ADD COLUMN verified TINYINT DEFAULT 0 AFTER status,
+    ADD COLUMN like_count INT DEFAULT 0 AFTER verified,
+    ADD COLUMN deleted TINYINT NOT NULL DEFAULT 0 AFTER updated_at;
+
+ALTER TABLE kb_vector_mapping
+    ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at,
+    ADD COLUMN deleted TINYINT NOT NULL DEFAULT 0 AFTER updated_at;
+
+ALTER TABLE ai_session
+    ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at,
+    ADD COLUMN deleted TINYINT NOT NULL DEFAULT 0 AFTER last_active_at;
+
+ALTER TABLE ai_message
+    ADD COLUMN updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at,
+    ADD COLUMN deleted TINYINT NOT NULL DEFAULT 0 AFTER updated_at;

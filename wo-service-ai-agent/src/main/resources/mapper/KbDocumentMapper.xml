@@ -12,14 +12,17 @@
         <result column="category" property="category"/>
         <result column="chunk_count" property="chunkCount"/>
         <result column="status" property="status"/>
+        <result column="verified" property="verified"/>
+        <result column="like_count" property="likeCount"/>
         <result column="created_by" property="createdBy"/>
-        <result column="create_time" property="createTime"/>
-        <result column="update_time" property="updateTime"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+        <result column="deleted" property="deleted"/>
     </resultMap>
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, title, content, source_type, source_id, category, chunk_count, status, created_by, create_time, update_time
+        id, title, content, source_type, source_id, category, chunk_count, status, verified, like_count, created_by, created_at, updated_at, deleted
     </sql>
 
 </mapper>

@@ -20,10 +20,10 @@
           <el-descriptions-item label="部门">{{ workOrder.department || '未分配' }}</el-descriptions-item>
           <el-descriptions-item label="创建人">{{ workOrder.creatorName || workOrder.creatorId || '-' }}</el-descriptions-item>
           <el-descriptions-item label="处理人">{{ assigneeText }}</el-descriptions-item>
-          <el-descriptions-item label="创建时间">{{ workOrder.createdAt }}</el-descriptions-item>
-          <el-descriptions-item label="SLA 截止">{{ workOrder.slaDeadline || '未分配' }}</el-descriptions-item>
-          <el-descriptions-item label="解决时间">{{ workOrder.resolvedAt || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="关闭时间">{{ workOrder.closedAt || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ formatTime(workOrder.createdAt) }}</el-descriptions-item>
+          <el-descriptions-item label="SLA 截止">{{ formatTime(workOrder.slaDeadline) || '未分配' }}</el-descriptions-item>
+          <el-descriptions-item label="解决时间">{{ formatTime(workOrder.resolvedAt) || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="关闭时间">{{ formatTime(workOrder.closedAt) || '-' }}</el-descriptions-item>
         </el-descriptions>
       </section>
 
@@ -36,6 +36,7 @@
           <el-button v-if="canClaim" type="primary" @click="handleClaim">认领工单</el-button>
           <el-button v-if="canSubmitResolution" type="success" @click="resolutionVisible = true">提交处理意见</el-button>
           <el-button v-if="canConfirmManualResult" type="success" @click="handleConfirm">确认完成</el-button>
+          <el-button v-if="canRejectManualResult" type="warning" @click="rejectVisible = true">驳回处理结果</el-button>
           <el-button @click="loadData">刷新</el-button>
         </div>
       </section>
@@ -66,6 +67,64 @@
       <el-empty v-else description="暂无 AI 分析结果" />
     </section>
 
+    <div class="collaboration-grid">
+      <section class="comment-panel">
+        <div class="panel-title">协作评论</div>
+        <div class="comment-list">
+          <div v-for="comment in comments" :key="comment.id" class="comment-item">
+            <div class="comment-meta">
+              <strong>{{ comment.userName || `用户#${comment.userId}` }}</strong>
+              <span>{{ formatTime(comment.createdAt) }}</span>
+              <el-tag v-if="comment.isInternal" type="warning" size="small">内部</el-tag>
+              <el-tag v-if="comment.isAiGenerated" type="info" size="small">AI</el-tag>
+            </div>
+            <p>{{ comment.content }}</p>
+          </div>
+          <el-empty v-if="comments.length === 0" description="暂无评论" />
+        </div>
+
+        <div class="comment-form">
+          <el-input
+            v-model="commentContent"
+            type="textarea"
+            :rows="3"
+            maxlength="1000"
+            show-word-limit
+            placeholder="输入评论"
+          />
+          <div class="comment-actions">
+            <el-checkbox v-if="canHandleManualWork" v-model="commentInternal">内部备注</el-checkbox>
+            <span v-else></span>
+            <el-button type="primary" :loading="commentLoading" :disabled="!commentContent.trim()" @click="handleAddComment">
+              发送
+            </el-button>
+          </div>
+        </div>
+      </section>
+
+      <section class="flow-panel">
+        <div class="panel-title">流转记录</div>
+        <el-timeline v-if="flowRecords.length > 0">
+          <el-timeline-item
+            v-for="record in flowRecords"
+            :key="record.id"
+            :timestamp="formatTime(record.createdAt)"
+            placement="top"
+          >
+            <div class="flow-title">
+              <strong>{{ getActionLabel(record.action) }}</strong>
+              <span>{{ record.operatorName || `用户#${record.operatorId}` }}</span>
+            </div>
+            <div v-if="record.fromStatus || record.toStatus" class="flow-status">
+              {{ getStatusLabel(record.fromStatus) || '-' }} → {{ getStatusLabel(record.toStatus) || '-' }}
+            </div>
+            <p v-if="record.comment">{{ record.comment }}</p>
+          </el-timeline-item>
+        </el-timeline>
+        <el-empty v-else description="暂无流转记录" />
+      </section>
+    </div>
+
     <el-dialog v-model="resolutionVisible" title="提交处理意见" width="520px">
       <el-form label-position="top">
         <el-form-item label="处理意见">
@@ -73,15 +132,34 @@
             v-model="resolutionComment"
             type="textarea"
             :rows="5"
-            maxlength="500"
+            maxlength="1000"
             show-word-limit
-            placeholder="请填写故障原因、处理过程或最终解决方案"
+            placeholder="填写原因、处理过程或解决方案"
           />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="resolutionVisible = false">取消</el-button>
         <el-button type="primary" :disabled="!resolutionComment.trim()" @click="handleResolve">提交并标记已解决</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="rejectVisible" title="驳回处理结果" width="520px">
+      <el-form label-position="top">
+        <el-form-item label="驳回原因">
+          <el-input
+            v-model="rejectReason"
+            type="textarea"
+            :rows="4"
+            maxlength="1000"
+            show-word-limit
+            placeholder="说明未解决的问题或需要补充处理的内容"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="rejectVisible = false">取消</el-button>
+        <el-button type="warning" :disabled="!rejectReason.trim()" @click="handleReject">确认驳回</el-button>
       </template>
     </el-dialog>
   </div>
@@ -93,12 +171,29 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getWorkOrder, confirmWorkOrder, escalateWorkOrder, claimWorkOrder, updateStatus } from '../api'
+import {
+  addComment,
+  claimWorkOrder,
+  confirmWorkOrder,
+  escalateWorkOrder,
+  getComments,
+  getFlowRecords,
+  getWorkOrder,
+  rejectWorkOrder,
+  updateStatus
+} from '../api'
 
 const route = useRoute()
 const workOrder = ref(null)
+const comments = ref([])
+const flowRecords = ref([])
 const resolutionVisible = ref(false)
+const rejectVisible = ref(false)
 const resolutionComment = ref('')
+const rejectReason = ref('')
+const commentContent = ref('')
+const commentInternal = ref(false)
+const commentLoading = ref(false)
 const currentUserId = localStorage.getItem('userId')
 const currentRole = localStorage.getItem('role') || 'USER'
 const canHandleManualWork = computed(() => ['ADMIN', 'MANAGER', 'AGENT'].includes(currentRole))
@@ -108,6 +203,7 @@ const canClaim = computed(() => workOrder.value?.status === 'ESCALATED' && canHa
 const canCompleteAiOrder = computed(() => workOrder.value?.status === 'AI_SOLVED' && isCreator.value)
 const canEscalateToManual = computed(() => workOrder.value?.status === 'AI_SOLVED' && isCreator.value)
 const canConfirmManualResult = computed(() => workOrder.value?.status === 'RESOLVED' && isCreator.value)
+const canRejectManualResult = computed(() => workOrder.value?.status === 'RESOLVED' && isCreator.value)
 
 const assigneeText = computed(() => {
   if (!workOrder.value?.assigneeId) {
@@ -116,7 +212,30 @@ const assigneeText = computed(() => {
   return workOrder.value.assigneeName || `用户#${workOrder.value.assigneeId}`
 })
 
+const canSubmitResolution = computed(() => {
+  if (workOrder.value?.status !== 'IN_PROGRESS') {
+    return false
+  }
+  return canHandleManualWork.value && (['ADMIN', 'MANAGER'].includes(currentRole) || String(workOrder.value.assigneeId) === String(currentUserId))
+})
+
+const actionHint = computed(() => {
+  const status = workOrder.value?.status
+  if (status === 'AI_SOLVED') return isCreator.value ? 'AI 已给出处理建议，请选择完成或转人工。' : 'AI 已给出处理建议，等待创建人确认。'
+  if (status === 'ESCALATED') return canHandleManualWork.value ? '工单已进入人工队列，可以认领处理。' : '工单已进入人工处理队列。'
+  if (status === 'IN_PROGRESS') return canSubmitResolution.value ? '填写处理意见后可标记为已解决。' : '处理人正在跟进。'
+  if (status === 'RESOLVED') return isCreator.value ? '处理人已提交结果，请确认或驳回。' : '等待创建人确认。'
+  if (status === 'OPEN') return '工单已创建，等待 AI 分析。'
+  if (status === 'CLOSED') return '工单已关闭。'
+  return '当前状态暂无待处理动作。'
+})
+
 const loadData = async () => {
+  await loadWorkOrder()
+  await Promise.all([loadComments(), loadFlowRecords()])
+}
+
+const loadWorkOrder = async () => {
   try {
     const res = await getWorkOrder(route.params.id)
     if (res.code === 0) {
@@ -129,22 +248,106 @@ const loadData = async () => {
   }
 }
 
-const canSubmitResolution = computed(() => {
-  if (workOrder.value?.status !== 'IN_PROGRESS') {
-    return false
+const loadComments = async () => {
+  try {
+    const res = await getComments(route.params.id)
+    comments.value = res.code === 0 ? res.data || [] : []
+  } catch (e) {
+    comments.value = []
   }
-  return canHandleManualWork.value && (['ADMIN', 'MANAGER'].includes(currentRole) || String(workOrder.value.assigneeId) === String(currentUserId))
-})
+}
 
-const actionHint = computed(() => {
-  const status = workOrder.value?.status
-  if (status === 'AI_SOLVED') return isCreator.value ? 'AI 已给出处理建议，请选择处理完成或转人工处理。' : 'AI 已给出处理建议，等待创建人确认或转人工处理。'
-  if (status === 'ESCALATED') return canHandleManualWork.value ? '该工单已进入人工处理队列，处理人可以认领。' : '该工单已进入人工处理队列，需要处理人员、部门经理或管理员认领。'
-  if (status === 'IN_PROGRESS') return canSubmitResolution.value ? '该工单正在处理中，请填写处理意见后标记为已解决。' : '该工单已被处理人认领，等待处理结果。'
-  if (status === 'RESOLVED') return isCreator.value ? '处理人已提交解决结果，请确认工单完成。' : '处理人已提交解决结果，等待创建人确认。'
-  if (status === 'OPEN') return '工单已创建，等待 AI 给出处理建议。'
-  return '当前状态暂无必须处理的动作。'
-})
+const loadFlowRecords = async () => {
+  try {
+    const res = await getFlowRecords(route.params.id)
+    flowRecords.value = res.code === 0 ? res.data || [] : []
+  } catch (e) {
+    flowRecords.value = []
+  }
+}
+
+const handleConfirm = async () => {
+  await ElMessageBox.confirm('确认关闭该工单？', '确认')
+  const res = await confirmWorkOrder(route.params.id)
+  if (res.code === 0) {
+    ElMessage.success('工单已关闭')
+    loadData()
+  } else {
+    ElMessage.error(res.message)
+  }
+}
+
+const handleEscalate = async () => {
+  await ElMessageBox.confirm('确认转人工处理？', '确认')
+  const res = await escalateWorkOrder(route.params.id)
+  if (res.code === 0) {
+    ElMessage.success('已转人工处理')
+    loadData()
+  } else {
+    ElMessage.error(res.message)
+  }
+}
+
+const handleClaim = async () => {
+  await ElMessageBox.confirm('认领此工单？', '确认')
+  const res = await claimWorkOrder(route.params.id)
+  if (res.code === 0) {
+    ElMessage.success('认领成功')
+    loadData()
+  } else {
+    ElMessage.error(res.message)
+  }
+}
+
+const handleResolve = async () => {
+  const res = await updateStatus(route.params.id, 'RESOLVED', resolutionComment.value.trim())
+  if (res.code === 0) {
+    ElMessage.success('处理意见已提交')
+    resolutionVisible.value = false
+    resolutionComment.value = ''
+    loadData()
+  } else {
+    ElMessage.error(res.message)
+  }
+}
+
+const handleReject = async () => {
+  const res = await rejectWorkOrder(route.params.id, rejectReason.value.trim())
+  if (res.code === 0) {
+    ElMessage.success('已驳回处理结果')
+    rejectVisible.value = false
+    rejectReason.value = ''
+    loadData()
+  } else {
+    ElMessage.error(res.message)
+  }
+}
+
+const handleAddComment = async () => {
+  commentLoading.value = true
+  try {
+    const res = await addComment(route.params.id, {
+      content: commentContent.value.trim(),
+      isInternal: canHandleManualWork.value ? commentInternal.value : false
+    })
+    if (res.code === 0) {
+      comments.value.push(res.data)
+      commentContent.value = ''
+      commentInternal.value = false
+      loadFlowRecords()
+      ElMessage.success('评论已发送')
+    } else {
+      ElMessage.error(res.message)
+    }
+  } finally {
+    commentLoading.value = false
+  }
+}
+
+const formatTime = (value) => {
+  if (!value) return ''
+  return String(value).replace('T', ' ').slice(0, 19)
+}
 
 const getStatusType = (status) => {
   const map = { OPEN: 'info', AI_SOLVED: 'success', ESCALATED: 'warning', IN_PROGRESS: 'primary', RESOLVED: 'success', CLOSED: '' }
@@ -166,47 +369,22 @@ const getPriorityLabel = (priority) => {
   return map[priority] || priority
 }
 
-const handleConfirm = async () => {
-  await ElMessageBox.confirm('确认该工单处理完成并关闭？', '确认')
-  const res = await confirmWorkOrder(route.params.id)
-  if (res.code === 0) {
-    ElMessage.success('工单已确认完成')
-    loadData()
-  } else {
-    ElMessage.error(res.message)
+const getActionLabel = (action) => {
+  const map = {
+    CREATE: '创建工单',
+    AI_SOLVED: 'AI 处理',
+    ESCALATE: '转人工',
+    CLAIM: '认领',
+    ASSIGN: '分配',
+    STATUS_CHANGE: '状态变更',
+    CONFIRM: '确认完成',
+    REJECT_RESOLUTION: '驳回结果',
+    COMMENT: '评论',
+    AI_COMMENT: 'AI 评论',
+    ATTACHMENT: '附件',
+    SLA_BREACH: 'SLA 超时'
   }
-}
-
-const handleEscalate = async () => {
-  await ElMessageBox.confirm('AI 建议未解决问题，确认转人工处理？', '确认')
-  const res = await escalateWorkOrder(route.params.id)
-  if (res.code === 0) {
-    ElMessage.success('已转人工处理')
-    loadData()
-  } else {
-    ElMessage.error(res.message)
-  }
-}
-
-const handleClaim = async () => {
-  await ElMessageBox.confirm('认领此工单？', '确认')
-  const res = await claimWorkOrder(route.params.id)
-  if (res.code === 0) {
-    ElMessage.success('认领成功')
-    loadData()
-  }
-}
-
-const handleResolve = async () => {
-  const res = await updateStatus(route.params.id, 'RESOLVED', resolutionComment.value.trim())
-  if (res.code === 0) {
-    ElMessage.success('处理意见已提交')
-    resolutionVisible.value = false
-    resolutionComment.value = ''
-    loadData()
-  } else {
-    ElMessage.error(res.message)
-  }
+  return map[action] || action
 }
 
 onMounted(loadData)
@@ -222,7 +400,9 @@ onMounted(loadData)
 .summary-panel,
 .info-panel,
 .action-panel,
-.ai-panel {
+.ai-panel,
+.comment-panel,
+.flow-panel {
   background: #fff;
   border: 1px solid #e7eaf0;
   border-radius: 8px;
@@ -259,15 +439,18 @@ onMounted(loadData)
   flex-shrink: 0;
 }
 
-.detail-grid {
+.detail-grid,
+.collaboration-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 16px;
 }
 
 .info-panel,
 .action-panel,
-.ai-panel {
+.ai-panel,
+.comment-panel,
+.flow-panel {
   padding: 18px;
 }
 
@@ -316,9 +499,69 @@ onMounted(loadData)
   grid-column: 1 / -1;
 }
 
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 380px;
+  overflow: auto;
+}
+
+.comment-item {
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.comment-meta,
+.flow-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.comment-meta strong,
+.flow-title strong {
+  color: #1f2937;
+  font-size: 13px;
+}
+
+.comment-item p,
+.flow-panel p {
+  margin: 8px 0 0;
+  color: #374151;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.comment-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.comment-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.flow-status {
+  margin-top: 6px;
+  color: #409eff;
+  font-size: 12px;
+}
+
 @media (max-width: 1000px) {
   .summary-panel,
-  .detail-grid {
+  .detail-grid,
+  .collaboration-grid {
     grid-template-columns: 1fr;
   }
 

@@ -17,4 +17,13 @@ public enum WorkOrderStatus {
 
     private final String code;
     private final String desc;
+
+    public static boolean isValid(String code) {
+        for (WorkOrderStatus status : values()) {
+            if (status.code.equals(code)) {
+                return true;
+            }
+        }
+        return false;
+    }
 }

@@ -1,6 +1,7 @@
 package com.wo.api.client;
 
 import com.wo.api.client.fallback.WorkOrderClientFallback;
+import com.wo.api.config.InternalFeignConfig;
 import com.wo.api.dto.workorder.*;
 import com.wo.common.result.PageResult;
 import com.wo.common.result.R;
@@ -10,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@FeignClient(name = "wo-service-workorder", fallbackFactory = WorkOrderClientFallback.class)
+@FeignClient(name = "wo-service-workorder", fallbackFactory = WorkOrderClientFallback.class, configuration = InternalFeignConfig.class)
 public interface WorkOrderClient {
 
     @GetMapping("/api/workorders/{id}")
@@ -24,20 +25,25 @@ public interface WorkOrderClient {
 
     @PutMapping("/api/workorders/{id}/status")
     R<Void> updateWorkOrderStatus(@PathVariable("id") Long id,
-                                  @RequestParam("status") String status,
-                                  @RequestParam(value = "comment", required = false) String comment);
+                                  @RequestBody WorkOrderStatusUpdateDTO dto);
 
     @PutMapping("/api/workorders/{id}/assign")
     R<Void> assignWorkOrder(@PathVariable("id") Long id,
-                            @RequestParam("assigneeId") Long assigneeId,
-                            @RequestParam(value = "reason", required = false) String reason);
+                            @RequestBody WorkOrderAssignDTO dto);
+
+    @PutMapping("/api/workorders/{id}/reject")
+    R<Void> rejectResolution(@PathVariable("id") Long id,
+                             @RequestBody WorkOrderRejectDTO dto);
+
+    @GetMapping("/api/workorders/{id}/flows")
+    R<List<FlowRecordVO>> listFlowRecords(@PathVariable("id") Long id);
 
     @GetMapping("/api/workorders/{workOrderId}/comments")
     R<List<CommentVO>> getComments(@PathVariable("workOrderId") Long workOrderId);
 
     @PostMapping("/api/workorders/{workOrderId}/comments")
-    R<Void> addComment(@PathVariable("workOrderId") Long workOrderId,
-                       @RequestBody CommentCreateDTO dto);
+    R<CommentVO> addComment(@PathVariable("workOrderId") Long workOrderId,
+                            @RequestBody CommentCreateDTO dto);
 
     @PutMapping("/api/workorders/internal/{id}/sla-deadline")
     R<Void> updateSlaDeadline(@PathVariable("id") Long id,

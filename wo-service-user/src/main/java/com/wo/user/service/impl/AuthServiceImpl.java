@@ -4,6 +4,7 @@ import com.wo.api.dto.user.LoginRequest;
 import com.wo.api.dto.user.LoginResponse;
 import com.wo.api.dto.user.UserCreateDTO;
 import com.wo.common.enums.ErrorCode;
+import com.wo.common.enums.UserRole;
 import com.wo.common.exception.BizException;
 import com.wo.common.util.JwtUtil;
 import com.wo.user.entity.SysUser;
@@ -73,7 +74,7 @@ public class AuthServiceImpl implements AuthService {
         user.setEmail(dto.getEmail());
         user.setPhone(dto.getPhone());
         user.setDepartment(dto.getDepartment());
-        user.setRole(dto.getRole() != null ? dto.getRole() : "USER");
+        user.setRole(UserRole.USER.getCode());
         user.setStatus(1);
 
         // Save to database
@@ -97,7 +98,6 @@ public class AuthServiceImpl implements AuthService {
         // Parse and validate old token
         Long userId = JwtUtil.getUserId(token);
         String username = JwtUtil.getUsername(token);
-        String role = JwtUtil.getRole(token);
 
         if (userId == null || username == null) {
             throw new BizException(ErrorCode.UNAUTHORIZED);
@@ -110,7 +110,7 @@ public class AuthServiceImpl implements AuthService {
         }
 
         // Generate new token
-        String newToken = JwtUtil.generateToken(userId, username, role);
+        String newToken = JwtUtil.generateToken(userId, username, user.getRole());
 
         // Build response
         LoginResponse response = new LoginResponse();

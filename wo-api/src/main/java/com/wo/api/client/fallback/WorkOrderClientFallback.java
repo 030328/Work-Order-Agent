@@ -35,13 +35,23 @@ public class WorkOrderClientFallback implements FallbackFactory<WorkOrderClient>
             }
 
             @Override
-            public R<Void> updateWorkOrderStatus(Long id, String status, String comment) {
+            public R<Void> updateWorkOrderStatus(Long id, WorkOrderStatusUpdateDTO dto) {
                 return R.fail("工单服务不可用，请稍后重试");
             }
 
             @Override
-            public R<Void> assignWorkOrder(Long id, Long assigneeId, String reason) {
+            public R<Void> assignWorkOrder(Long id, WorkOrderAssignDTO dto) {
                 return R.fail("工单服务不可用，请稍后重试");
+            }
+
+            @Override
+            public R<Void> rejectResolution(Long id, WorkOrderRejectDTO dto) {
+                return R.fail("work order service unavailable");
+            }
+
+            @Override
+            public R<List<FlowRecordVO>> listFlowRecords(Long id) {
+                return R.fail("work order service unavailable");
             }
 
             @Override
@@ -50,7 +60,7 @@ public class WorkOrderClientFallback implements FallbackFactory<WorkOrderClient>
             }
 
             @Override
-            public R<Void> addComment(Long workOrderId, CommentCreateDTO dto) {
+            public R<CommentVO> addComment(Long workOrderId, CommentCreateDTO dto) {
                 return R.fail("工单服务不可用，请稍后重试");
             }
 

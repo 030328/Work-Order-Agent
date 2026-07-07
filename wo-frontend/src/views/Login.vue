@@ -20,7 +20,7 @@
 
       <h2>{{ mode === 'login' ? '登录系统' : '注册账号' }}</h2>
       <p class="subtitle">
-        {{ mode === 'login' ? '默认可使用 admin / admin123' : '请补全姓名、部门和角色，便于工单归属与认领流转' }}
+        {{ mode === 'login' ? '默认可使用 admin / admin123' : '请补全姓名和部门，注册后默认作为普通提交人使用' }}
       </p>
 
       <el-form :model="form" :rules="rules" ref="formRef" label-position="top">
@@ -42,13 +42,6 @@
               <el-option label="客服部" value="客服部" />
               <el-option label="运维部" value="运维部" />
               <el-option label="运营部" value="运营部" />
-            </el-select>
-          </el-form-item>
-          <el-form-item label="角色" prop="role">
-            <el-select v-model="form.role" placeholder="请选择角色" class="full-field">
-              <el-option label="普通用户" value="USER" />
-              <el-option label="处理人员" value="AGENT" />
-              <el-option label="部门经理" value="MANAGER" />
             </el-select>
           </el-form-item>
           <el-form-item label="邮箱" prop="email">

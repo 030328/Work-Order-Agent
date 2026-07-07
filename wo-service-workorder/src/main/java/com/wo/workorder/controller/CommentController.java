@@ -31,10 +31,10 @@ public class CommentController {
      * 添加评论
      */
     @PostMapping
-    public R<Void> addComment(@PathVariable Long workOrderId,
-                              @Valid @RequestBody CommentCreateDTO dto) {
-        Long userId = SecurityUtil.getCurrentUserId();
-        commentService.addComment(workOrderId, dto, userId, false);
-        return R.ok();
+    public R<CommentVO> addComment(@PathVariable Long workOrderId,
+                                   @Valid @RequestBody CommentCreateDTO dto) {
+        Long userId = SecurityUtil.requireCurrentUserId();
+        CommentVO comment = commentService.addComment(workOrderId, dto, userId, false);
+        return R.ok(comment);
     }
 }

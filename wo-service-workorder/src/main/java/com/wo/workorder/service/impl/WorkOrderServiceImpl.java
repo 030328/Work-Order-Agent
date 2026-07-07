@@ -6,9 +6,11 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.wo.api.client.AiAgentClient;
 import com.wo.api.client.UserClient;
 import com.wo.api.client.WorkflowClient;
+import com.wo.api.dto.ai.KnowledgeIndexRequest;
 import com.wo.api.dto.ai.WorkOrderAnalysisRequest;
 import com.wo.api.dto.ai.WorkOrderAnalysisResult;
 import com.wo.api.dto.user.UserInfo;
+import com.wo.api.dto.workorder.FlowRecordVO;
 import com.wo.api.dto.workorder.WorkOrderBriefVO;
 import com.wo.api.dto.workorder.WorkOrderCreateDTO;
 import com.wo.api.dto.workorder.WorkOrderQueryDTO;
@@ -33,6 +35,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
@@ -64,11 +68,14 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         if (workOrder == null) {
             throw new BizException(ErrorCode.WO_NOT_FOUND);
         }
+        ensureReadable(workOrder);
         return convertToVO(workOrder);
     }
 
     @Override
     public PageResult<WorkOrderBriefVO> queryWorkOrders(WorkOrderQueryDTO query) {
+        normalizeQuery(query);
+        validateQuery(query);
         Page<WoWorkOrder> page = new Page<>(query.getPage(), query.getSize());
 
         LambdaQueryWrapper<WoWorkOrder> wrapper = new LambdaQueryWrapper<>();
@@ -81,6 +88,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 .ge(query.getStartDate() != null, WoWorkOrder::getCreatedAt, query.getStartDate())
                 .le(query.getEndDate() != null, WoWorkOrder::getCreatedAt, query.getEndDate())
                 .orderByDesc(WoWorkOrder::getCreatedAt);
+        applyVisibilityScope(wrapper);
 
         Page<WoWorkOrder> result = workOrderMapper.selectPage(page, wrapper);
 
@@ -93,6 +101,8 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
     @Override
     public Map<String, Long> countWorkOrdersByStatus(WorkOrderQueryDTO query) {
+        normalizeQuery(query);
+        validateQuery(query);
         QueryWrapper<WoWorkOrder> wrapper = new QueryWrapper<>();
         wrapper.select("status", "COUNT(*) AS count")
                 .like(StringUtils.hasText(query.getKeyword()), "title", query.getKeyword())
@@ -101,8 +111,9 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 .eq(query.getAssigneeId() != null, "assignee_id", query.getAssigneeId())
                 .eq(query.getCreatorId() != null, "creator_id", query.getCreatorId())
                 .ge(query.getStartDate() != null, "created_at", query.getStartDate())
-                .le(query.getEndDate() != null, "created_at", query.getEndDate())
-                .groupBy("status");
+                .le(query.getEndDate() != null, "created_at", query.getEndDate());
+        applyVisibilityScope(wrapper);
+        wrapper.groupBy("status");
 
         Map<String, Long> counts = new HashMap<>();
         for (WorkOrderStatus status : WorkOrderStatus.values()) {
@@ -144,9 +155,6 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         // 发布创建事件
         workOrderEventPublisher.publishStatusChangeEvent(workOrder.getId(), null, WorkOrderStatus.OPEN.getCode());
 
-        // 索引到ES
-        workOrderSearchService.indexWorkOrder(workOrder);
-
         // 调用AI分析（包含 ES 相似工单检索）
         try {
             // 1. 从 ES 检索相似历史工单
@@ -176,7 +184,6 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                         WorkOrderStatus.AI_SOLVED.getCode(), 0L, "AI已给出处理建议", 1);
                 workOrderEventPublisher.publishStatusChangeEvent(workOrder.getId(),
                         WorkOrderStatus.OPEN.getCode(), WorkOrderStatus.AI_SOLVED.getCode());
-                workOrderSearchService.indexWorkOrder(workOrder);
                 log.info("AI分析完成, id={}", workOrder.getId());
             }
         } catch (Exception e) {
@@ -189,10 +196,12 @@ public class WorkOrderServiceImpl implements WorkOrderService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateStatus(Long id, String status, Long operatorId, String comment) {
+        ensureKnownStatus(status);
         WoWorkOrder workOrder = workOrderMapper.selectById(id);
         if (workOrder == null) {
             throw new BizException(ErrorCode.WO_NOT_FOUND);
         }
+        ensureStatusUpdateAllowed(workOrder, status, operatorId);
 
         String fromStatus = workOrder.getStatus();
 
@@ -223,17 +232,19 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             workOrderEventPublisher.publishCloseEvent(id);
         }
 
-        // 更新ES索引
-        workOrderSearchService.indexWorkOrder(workOrder);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void assignWorkOrder(Long id, Long assigneeId, Long operatorId, String reason) {
+        if (assigneeId == null) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "assigneeId is required");
+        }
         WoWorkOrder workOrder = workOrderMapper.selectById(id);
         if (workOrder == null) {
             throw new BizException(ErrorCode.WO_NOT_FOUND);
         }
+        ensureAssignAllowed(workOrder, assigneeId, operatorId);
 
         String fromStatus = workOrder.getStatus();
         workOrder.setAssigneeId(assigneeId);
@@ -257,8 +268,6 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             workOrderEventPublisher.publishStatusChangeEvent(id, fromStatus, toStatus);
         }
 
-        // 更新ES索引
-        workOrderSearchService.indexWorkOrder(workOrder);
     }
 
     @Override
@@ -301,19 +310,43 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         saveFlowRecord(id, "CONFIRM", fromStatus, WorkOrderStatus.CLOSED.getCode(), userId, "用户确认完成", 0);
         workOrderEventPublisher.publishStatusChangeEvent(id, fromStatus, WorkOrderStatus.CLOSED.getCode());
         workOrderEventPublisher.publishCloseEvent(id);
-        workOrderSearchService.indexWorkOrder(workOrder);
 
-        // 异步：AI 总结经验，写入知识库
-        try {
-            String summary = String.format("工单：%s\n问题描述：%s\n解决方案：%s",
-                    workOrder.getTitle(), workOrder.getDescription(), workOrder.getAiSuggestedSolution());
-            // TODO: 调用 AI Agent 索引到 Milvus
-            log.info("工单经验已记录, id={}", id);
-        } catch (Exception e) {
-            log.warn("工单经验记录失败, id={}", id, e);
-        }
+        KnowledgeIndexRequest knowledgeRequest = buildKnowledgeIndexRequest(workOrder);
+        indexKnowledgeAfterCommit(id, knowledgeRequest);
 
         log.info("工单确认完成, id={}", id);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void rejectResolution(Long id, Long userId, String reason) {
+        if (!StringUtils.hasText(reason)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "reason is required");
+        }
+
+        WoWorkOrder workOrder = workOrderMapper.selectById(id);
+        if (workOrder == null) {
+            throw new BizException(ErrorCode.WO_NOT_FOUND);
+        }
+
+        ensureCreator(workOrder, userId, "驳回处理结果");
+
+        String fromStatus = workOrder.getStatus();
+        if (!WorkOrderStatus.RESOLVED.getCode().equals(fromStatus)) {
+            throw new BizException(ErrorCode.WO_STATUS_INVALID, "Only resolved work orders can be rejected");
+        }
+
+        validateStatusTransition(id, fromStatus, WorkOrderStatus.IN_PROGRESS.getCode(),
+                userId, SecurityUtil.getCurrentRole(), reason);
+
+        workOrder.setStatus(WorkOrderStatus.IN_PROGRESS.getCode());
+        workOrder.setResolvedAt(null);
+        workOrderMapper.updateById(workOrder);
+
+        saveFlowRecord(id, "REJECT_RESOLUTION", fromStatus, WorkOrderStatus.IN_PROGRESS.getCode(), userId, reason, 0);
+        workOrderEventPublisher.publishStatusChangeEvent(id, fromStatus, WorkOrderStatus.IN_PROGRESS.getCode());
+
+        log.info("Work order resolution rejected, id={}, userId={}", id, userId);
     }
 
     @Override
@@ -323,6 +356,7 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         if (workOrder == null) {
             throw new BizException(ErrorCode.WO_NOT_FOUND);
         }
+        ensureCreatorOrAdmin(workOrder, userId, "重新生成AI方案");
 
         // 重新调用 AI 分析
         try {
@@ -384,7 +418,6 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         saveFlowRecord(id, "ESCALATE", fromStatus, WorkOrderStatus.ESCALATED.getCode(),
                 userId, "转人工处理，分配部门：" + department, 0);
         workOrderEventPublisher.publishStatusChangeEvent(id, fromStatus, WorkOrderStatus.ESCALATED.getCode());
-        workOrderSearchService.indexWorkOrder(workOrder);
 
         log.info("工单转人工, id={}, department={}", id, department);
     }
@@ -400,6 +433,10 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         if (!WorkOrderStatus.ESCALATED.getCode().equals(workOrder.getStatus())) {
             throw new BizException(ErrorCode.WO_STATUS_INVALID, "只有转人工状态的工单才能认领");
         }
+        ensureClaimAllowed(workOrder, userId);
+
+        validateStatusTransition(id, WorkOrderStatus.ESCALATED.getCode(), WorkOrderStatus.IN_PROGRESS.getCode(),
+                userId, SecurityUtil.getCurrentRole(), "认领工单");
 
         workOrder.setStatus(WorkOrderStatus.IN_PROGRESS.getCode());
         workOrder.setAssigneeId(userId);
@@ -408,12 +445,15 @@ public class WorkOrderServiceImpl implements WorkOrderService {
 
         saveFlowRecord(id, "CLAIM", WorkOrderStatus.ESCALATED.getCode(),
                 WorkOrderStatus.IN_PROGRESS.getCode(), userId, "认领工单", 0);
+        workOrderEventPublisher.publishStatusChangeEvent(id, WorkOrderStatus.ESCALATED.getCode(),
+                WorkOrderStatus.IN_PROGRESS.getCode());
 
         log.info("工单认领成功, id={}, assigneeId={}", id, userId);
     }
 
     @Override
     public PageResult<WorkOrderBriefVO> getDepartmentWorkOrders(String department, int page, int size) {
+        ensureDepartmentAccess(department);
         Page<WoWorkOrder> pageParam = new Page<>(page, size);
         LambdaQueryWrapper<WoWorkOrder> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(WoWorkOrder::getDepartment, department)
@@ -426,6 +466,23 @@ public class WorkOrderServiceImpl implements WorkOrderService {
                 .collect(Collectors.toList());
 
         return PageResult.of(result.getTotal(), result.getCurrent(), result.getSize(), voList);
+    }
+
+    @Override
+    public List<FlowRecordVO> listFlowRecords(Long id) {
+        WoWorkOrder workOrder = workOrderMapper.selectById(id);
+        if (workOrder == null) {
+            throw new BizException(ErrorCode.WO_NOT_FOUND);
+        }
+        ensureReadable(workOrder);
+
+        LambdaQueryWrapper<WoFlowRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(WoFlowRecord::getWorkOrderId, id)
+                .orderByAsc(WoFlowRecord::getCreatedAt);
+
+        return flowRecordMapper.selectList(wrapper).stream()
+                .map(this::convertFlowRecordToVO)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -480,7 +537,297 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         saveFlowRecord(id, "SLA_BREACH", fromStatus, WorkOrderStatus.ESCALATED.getCode(),
                 0L, "SLA超时，系统自动转人工处理", 1);
         workOrderEventPublisher.publishStatusChangeEvent(id, fromStatus, WorkOrderStatus.ESCALATED.getCode());
-        workOrderSearchService.indexWorkOrder(workOrder);
+    }
+
+    private void normalizeQuery(WorkOrderQueryDTO query) {
+        if (query.getPage() == null || query.getPage() < 1) {
+            query.setPage(1);
+        }
+        if (query.getSize() == null || query.getSize() < 1) {
+            query.setSize(10);
+        }
+        if (query.getSize() > 100) {
+            query.setSize(100);
+        }
+    }
+
+    private void validateQuery(WorkOrderQueryDTO query) {
+        if (StringUtils.hasText(query.getStatus())) {
+            ensureKnownStatus(query.getStatus());
+        }
+    }
+
+    private void ensureKnownStatus(String status) {
+        if (!StringUtils.hasText(status) || !WorkOrderStatus.isValid(status)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "Invalid work order status: " + status);
+        }
+    }
+
+    private FlowRecordVO convertFlowRecordToVO(WoFlowRecord record) {
+        FlowRecordVO vo = new FlowRecordVO();
+        BeanUtils.copyProperties(record, vo);
+        vo.setIsSystem(record.getIsSystem() != null && record.getIsSystem() == 1);
+        vo.setOperatorName(resolveUserName(record.getOperatorId()));
+        return vo;
+    }
+
+    private String resolveUserName(Long userId) {
+        if (userId == null) {
+            return null;
+        }
+        if (userId == 0L) {
+            return "System";
+        }
+        try {
+            R<UserInfo> resp = userClient.getUserInfo(userId);
+            if (resp != null && resp.getData() != null) {
+                return resp.getData().getRealName();
+            }
+        } catch (Exception e) {
+            log.warn("Resolve user name failed, userId={}", userId, e);
+        }
+        return "User#" + userId;
+    }
+
+    private void applyVisibilityScope(LambdaQueryWrapper<WoWorkOrder> wrapper) {
+        if (!SecurityUtil.hasRequestContext()) {
+            return;
+        }
+        UserContext ctx = requireUserContext();
+        if (isAdmin(ctx.role())) {
+            return;
+        }
+        if (isUser(ctx.role())) {
+            wrapper.eq(WoWorkOrder::getCreatorId, ctx.userId());
+            return;
+        }
+        if (isAgent(ctx.role())) {
+            if (!StringUtils.hasText(ctx.department())) {
+                wrapper.eq(WoWorkOrder::getAssigneeId, ctx.userId());
+                return;
+            }
+            wrapper.and(w -> w.eq(WoWorkOrder::getAssigneeId, ctx.userId())
+                    .or()
+                    .and(dept -> dept.eq(WoWorkOrder::getDepartment, ctx.department())
+                            .eq(WoWorkOrder::getStatus, WorkOrderStatus.ESCALATED.getCode())));
+            return;
+        }
+        if (isManager(ctx.role())) {
+            ensureHasDepartment(ctx);
+            wrapper.eq(WoWorkOrder::getDepartment, ctx.department());
+            return;
+        }
+        throw new BizException(ErrorCode.FORBIDDEN);
+    }
+
+    private void applyVisibilityScope(QueryWrapper<WoWorkOrder> wrapper) {
+        if (!SecurityUtil.hasRequestContext()) {
+            return;
+        }
+        UserContext ctx = requireUserContext();
+        if (isAdmin(ctx.role())) {
+            return;
+        }
+        if (isUser(ctx.role())) {
+            wrapper.eq("creator_id", ctx.userId());
+            return;
+        }
+        if (isAgent(ctx.role())) {
+            if (!StringUtils.hasText(ctx.department())) {
+                wrapper.eq("assignee_id", ctx.userId());
+                return;
+            }
+            wrapper.and(w -> w.eq("assignee_id", ctx.userId())
+                    .or()
+                    .and(dept -> dept.eq("department", ctx.department())
+                            .eq("status", WorkOrderStatus.ESCALATED.getCode())));
+            return;
+        }
+        if (isManager(ctx.role())) {
+            ensureHasDepartment(ctx);
+            wrapper.eq("department", ctx.department());
+            return;
+        }
+        throw new BizException(ErrorCode.FORBIDDEN);
+    }
+
+    private void ensureReadable(WoWorkOrder workOrder) {
+        if (!SecurityUtil.hasRequestContext()) {
+            return;
+        }
+        UserContext ctx = requireUserContext();
+        if (isAdmin(ctx.role())
+                || isCreator(workOrder, ctx.userId())
+                || isAssignee(workOrder, ctx.userId())
+                || (isManager(ctx.role()) && sameDepartment(workOrder, ctx))
+                || (isAgent(ctx.role()) && WorkOrderStatus.ESCALATED.getCode().equals(workOrder.getStatus()) && sameDepartment(workOrder, ctx))) {
+            return;
+        }
+        throw new BizException(ErrorCode.FORBIDDEN, "无权访问该工单");
+    }
+
+    private void ensureStatusUpdateAllowed(WoWorkOrder workOrder, String toStatus, Long operatorId) {
+        if (!SecurityUtil.hasRequestContext()) {
+            return;
+        }
+        UserContext ctx = requireUserContext();
+        ensureOperatorMatchesContext(operatorId, ctx);
+        if (isAdmin(ctx.role())) {
+            return;
+        }
+        if (WorkOrderStatus.CLOSED.getCode().equals(toStatus) && isCreator(workOrder, ctx.userId())) {
+            return;
+        }
+        if (WorkOrderStatus.RESOLVED.getCode().equals(toStatus)
+                && (isAssignee(workOrder, ctx.userId()) || (isManager(ctx.role()) && sameDepartment(workOrder, ctx)))) {
+            return;
+        }
+        if (isManager(ctx.role()) && sameDepartment(workOrder, ctx)) {
+            return;
+        }
+        throw new BizException(ErrorCode.FORBIDDEN, "无权更新该工单状态");
+    }
+
+    private void ensureAssignAllowed(WoWorkOrder workOrder, Long assigneeId, Long operatorId) {
+        if (!SecurityUtil.hasRequestContext()) {
+            return;
+        }
+        UserContext ctx = requireUserContext();
+        ensureOperatorMatchesContext(operatorId, ctx);
+        UserInfo assignee = getUserInfoOrThrow(assigneeId);
+        if (!isManualHandlerRole(assignee.getRole())) {
+            throw new BizException(ErrorCode.FORBIDDEN, "只能分配给处理人、经理或管理员");
+        }
+        if (isAdmin(ctx.role())) {
+            return;
+        }
+        if (isManager(ctx.role()) && sameDepartment(workOrder, ctx)
+                && (!StringUtils.hasText(assignee.getDepartment()) || assignee.getDepartment().equals(ctx.department()))) {
+            return;
+        }
+        throw new BizException(ErrorCode.FORBIDDEN, "无权分配该工单");
+    }
+
+    private void ensureClaimAllowed(WoWorkOrder workOrder, Long userId) {
+        if (!SecurityUtil.hasRequestContext()) {
+            return;
+        }
+        UserContext ctx = requireUserContext();
+        ensureOperatorMatchesContext(userId, ctx);
+        if (isAdmin(ctx.role()) || ((isAgent(ctx.role()) || isManager(ctx.role())) && sameDepartment(workOrder, ctx))) {
+            return;
+        }
+        throw new BizException(ErrorCode.FORBIDDEN, "无权认领该部门工单");
+    }
+
+    private void ensureDepartmentAccess(String department) {
+        if (!SecurityUtil.hasRequestContext()) {
+            return;
+        }
+        UserContext ctx = requireUserContext();
+        if (isAdmin(ctx.role())) {
+            return;
+        }
+        if ((isAgent(ctx.role()) || isManager(ctx.role()))
+                && StringUtils.hasText(ctx.department())
+                && ctx.department().equals(department)) {
+            return;
+        }
+        throw new BizException(ErrorCode.FORBIDDEN, "无权查看该部门工单");
+    }
+
+    private void ensureCreatorOrAdmin(WoWorkOrder workOrder, Long userId, String action) {
+        if (!SecurityUtil.hasRequestContext()) {
+            return;
+        }
+        UserContext ctx = requireUserContext();
+        ensureOperatorMatchesContext(userId, ctx);
+        if (isAdmin(ctx.role()) || isCreator(workOrder, userId)) {
+            return;
+        }
+        throw new BizException(ErrorCode.FORBIDDEN, "只有工单创建人才能" + action);
+    }
+
+    private void ensureOperatorMatchesContext(Long operatorId, UserContext ctx) {
+        if (operatorId == null || !operatorId.equals(ctx.userId())) {
+            throw new BizException(ErrorCode.FORBIDDEN, "操作人与登录用户不一致");
+        }
+    }
+
+    private UserContext requireUserContext() {
+        Long userId = SecurityUtil.getCurrentUserId();
+        String role = SecurityUtil.getCurrentRole();
+        if (userId == null || !StringUtils.hasText(role)) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
+        return new UserContext(userId, role, getCurrentUserDepartment(userId));
+    }
+
+    private String getCurrentUserDepartment(Long userId) {
+        try {
+            R<UserInfo> resp = userClient.getUserInfo(userId);
+            if (resp != null && resp.getData() != null) {
+                return resp.getData().getDepartment();
+            }
+        } catch (Exception e) {
+            log.warn("获取当前用户部门失败, userId={}", userId, e);
+        }
+        return null;
+    }
+
+    private UserInfo getUserInfoOrThrow(Long userId) {
+        try {
+            R<UserInfo> resp = userClient.getUserInfo(userId);
+            if (resp != null && resp.getData() != null) {
+                return resp.getData();
+            }
+        } catch (Exception e) {
+            log.warn("获取用户信息失败, userId={}", userId, e);
+        }
+        throw new BizException(ErrorCode.USER_NOT_FOUND);
+    }
+
+    private void ensureHasDepartment(UserContext ctx) {
+        if (!StringUtils.hasText(ctx.department())) {
+            throw new BizException(ErrorCode.FORBIDDEN, "当前用户未配置部门");
+        }
+    }
+
+    private boolean sameDepartment(WoWorkOrder workOrder, UserContext ctx) {
+        return StringUtils.hasText(workOrder.getDepartment())
+                && StringUtils.hasText(ctx.department())
+                && workOrder.getDepartment().equals(ctx.department());
+    }
+
+    private boolean isCreator(WoWorkOrder workOrder, Long userId) {
+        return userId != null && workOrder.getCreatorId() != null && workOrder.getCreatorId().equals(userId);
+    }
+
+    private boolean isAssignee(WoWorkOrder workOrder, Long userId) {
+        return userId != null && workOrder.getAssigneeId() != null && workOrder.getAssigneeId().equals(userId);
+    }
+
+    private boolean isAdmin(String role) {
+        return "ADMIN".equals(role);
+    }
+
+    private boolean isManager(String role) {
+        return "MANAGER".equals(role);
+    }
+
+    private boolean isAgent(String role) {
+        return "AGENT".equals(role);
+    }
+
+    private boolean isUser(String role) {
+        return "USER".equals(role);
+    }
+
+    private boolean isManualHandlerRole(String role) {
+        return isAdmin(role) || isManager(role) || isAgent(role);
+    }
+
+    private record UserContext(Long userId, String role, String department) {
     }
 
     private String mapCategoryToDepartment(String category) {
@@ -491,6 +838,50 @@ public class WorkOrderServiceImpl implements WorkOrderService {
             case "MAINTENANCE" -> "运维部";
             default -> "技术部";
         };
+    }
+
+    private KnowledgeIndexRequest buildKnowledgeIndexRequest(WoWorkOrder workOrder) {
+        String solution = StringUtils.hasText(workOrder.getResolution())
+                ? workOrder.getResolution()
+                : workOrder.getAiSuggestedSolution();
+        return KnowledgeIndexRequest.builder()
+                .title(workOrder.getTitle())
+                .content(String.format("工单：%s\n问题描述：%s\n解决方案：%s",
+                        workOrder.getTitle(), workOrder.getDescription(), solution))
+                .sourceType("HISTORICAL_WO")
+                .sourceId(String.valueOf(workOrder.getId()))
+                .category(workOrder.getCategory())
+                .verified(1)
+                .likeCount(0)
+                .build();
+    }
+
+    private void indexKnowledgeAfterCommit(Long workOrderId, KnowledgeIndexRequest request) {
+        Runnable task = () -> {
+            try {
+                R<String> indexResult = aiAgentClient.indexKnowledge(request);
+                if (indexResult != null && indexResult.getCode() == 0) {
+                    log.info("工单经验已写入知识库, id={}", workOrderId);
+                } else {
+                    log.warn("工单经验写入知识库失败, id={}, message={}",
+                            workOrderId, indexResult != null ? indexResult.getMessage() : "empty response");
+                }
+            } catch (Exception e) {
+                log.warn("工单经验记录失败, id={}", workOrderId, e);
+            }
+        };
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()
+                && TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    task.run();
+                }
+            });
+            return;
+        }
+        task.run();
     }
 
     private void ensureCreator(WoWorkOrder workOrder, Long userId, String action) {
@@ -550,6 +941,9 @@ public class WorkOrderServiceImpl implements WorkOrderService {
         }
         if (WorkOrderStatus.RESOLVED.getCode().equals(from) && WorkOrderStatus.CLOSED.getCode().equals(to)) {
             return "close";
+        }
+        if (WorkOrderStatus.RESOLVED.getCode().equals(from) && WorkOrderStatus.IN_PROGRESS.getCode().equals(to)) {
+            return "reopen";
         }
         if (WorkOrderStatus.ESCALATED.getCode().equals(from) && WorkOrderStatus.IN_PROGRESS.getCode().equals(to)) {
             return "claim";

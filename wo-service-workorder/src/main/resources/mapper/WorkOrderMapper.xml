@@ -21,6 +21,9 @@
         <result column="ai_summary" property="aiSummary"/>
         <result column="ai_sentiment" property="aiSentiment"/>
         <result column="ai_category_suggestion" property="aiCategorySuggestion"/>
+        <result column="ai_suggested_solution" property="aiSuggestedSolution"/>
+        <result column="escalated_at" property="escalatedAt"/>
+        <result column="claimed_at" property="claimedAt"/>
         <result column="created_at" property="createdAt"/>
         <result column="updated_at" property="updatedAt"/>
         <result column="deleted" property="deleted"/>

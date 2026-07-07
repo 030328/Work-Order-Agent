@@ -58,6 +58,9 @@ CREATE TABLE wo_work_order (
     ai_summary              TEXT,
     ai_sentiment            VARCHAR(20),
     ai_category_suggestion  VARCHAR(30),
+    ai_suggested_solution   TEXT,
+    escalated_at            DATETIME,
+    claimed_at              DATETIME,
     created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted                 TINYINT NOT NULL DEFAULT 0,
@@ -126,7 +129,8 @@ CREATE TABLE wf_definition (
     version         INT NOT NULL DEFAULT 1,
     status          TINYINT NOT NULL DEFAULT 1,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted         TINYINT NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE wf_transition (
@@ -139,6 +143,9 @@ CREATE TABLE wf_transition (
     action_class    VARCHAR(200),
     required_role   VARCHAR(50),
     sort_order      INT DEFAULT 0,
+    created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted         TINYINT NOT NULL DEFAULT 0,
     INDEX idx_def_state (definition_id, from_state)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -150,7 +157,9 @@ CREATE TABLE wf_sla_rule (
     resolve_hours           INT NOT NULL,
     escalation_assignee_id  BIGINT,
     is_active               TINYINT DEFAULT 1,
-    created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted                 TINYINT NOT NULL DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================
@@ -166,9 +175,12 @@ CREATE TABLE kb_document (
     category    VARCHAR(50),
     chunk_count INT DEFAULT 0,
     status      TINYINT DEFAULT 1,
+    verified    TINYINT DEFAULT 0,
+    like_count  INT DEFAULT 0,
     created_by  BIGINT,
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted     TINYINT NOT NULL DEFAULT 0,
     INDEX idx_source (source_type, source_id),
     INDEX idx_category (category)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -181,6 +193,8 @@ CREATE TABLE kb_vector_mapping (
     milvus_id   VARCHAR(50) NOT NULL,
     token_count INT,
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted     TINYINT NOT NULL DEFAULT 0,
     INDEX idx_doc (document_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -197,7 +211,9 @@ CREATE TABLE ai_session (
     total_messages  INT DEFAULT 0,
     total_tokens    BIGINT DEFAULT 0,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     last_active_at  DATETIME,
+    deleted         TINYINT NOT NULL DEFAULT 0,
     INDEX idx_user (user_id),
     INDEX idx_wo (work_order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -211,5 +227,7 @@ CREATE TABLE ai_message (
     tool_call_id VARCHAR(100),
     token_count INT,
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted     TINYINT NOT NULL DEFAULT 0,
     INDEX idx_session (session_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

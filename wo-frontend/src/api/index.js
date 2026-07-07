@@ -20,10 +20,6 @@ api.interceptors.request.use(config => {
   if (token) {
     config.headers['Authorization'] = `Bearer ${token}`
   }
-  const userId = localStorage.getItem('userId')
-  if (userId) {
-    config.headers['X-User-Id'] = userId
-  }
   return config
 })
 
@@ -47,11 +43,17 @@ export const getWorkOrders = (params) => api.get('/workorders', { params })
 export const getWorkOrderStatusStats = (params) => api.get('/workorders/stats/status', { params })
 export const getWorkOrder = (id) => api.get(`/workorders/${id}`)
 export const createWorkOrder = (data) => api.post('/workorders', data)
-export const updateStatus = (id, status, comment) => api.put(`/workorders/${id}/status`, null, { params: { status, comment } })
+export const updateStatus = (id, status, comment) => api.put(`/workorders/${id}/status`, { status, comment })
 export const confirmWorkOrder = (id) => api.put(`/workorders/${id}/confirm`)
+export const rejectWorkOrder = (id, reason) => api.put(`/workorders/${id}/reject`, { reason })
 export const regenerateSolution = (id) => api.post(`/workorders/${id}/regenerate`)
 export const escalateWorkOrder = (id) => api.put(`/workorders/${id}/escalate`)
 export const claimWorkOrder = (id) => api.put(`/workorders/${id}/claim`)
+export const getComments = (id) => api.get(`/workorders/${id}/comments`)
+export const addComment = (id, data) => api.post(`/workorders/${id}/comments`, data)
+export const getFlowRecords = (id) => api.get(`/workorders/${id}/flows`)
+export const getAttachments = (id) => api.get(`/workorders/${id}/attachments`)
+export const addAttachmentMetadata = (id, data) => api.post(`/workorders/${id}/attachments/metadata`, data)
 
 // AI Chat
 export const chat = (data) => api.post('/ai/chat', data)

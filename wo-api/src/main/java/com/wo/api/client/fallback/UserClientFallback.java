@@ -3,12 +3,11 @@ package com.wo.api.client.fallback;
 import com.wo.api.client.UserClient;
 import com.wo.api.dto.user.UserInfo;
 import com.wo.api.dto.user.UserVO;
+import com.wo.common.result.PageResult;
 import com.wo.common.result.R;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.openfeign.FallbackFactory;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 @Slf4j
 @Component
@@ -25,7 +24,7 @@ public class UserClientFallback implements FallbackFactory<UserClient> {
             }
 
             @Override
-            public R<List<UserVO>> listUsers(String role, String department) {
+            public R<PageResult<UserVO>> listUsers(String role, String department) {
                 return R.fail("用户服务不可用，请稍后重试");
             }
 

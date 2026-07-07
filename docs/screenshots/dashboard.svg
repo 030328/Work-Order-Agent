@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f5f7fb"/>
+  <rect x="0" y="0" width="180" height="540" fill="#1f2937"/>
+  <text x="32" y="54" fill="#ffffff" font-family="Arial" font-size="20" font-weight="700">WO System</text>
+  <rect x="220" y="42" width="690" height="72" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <text x="246" y="86" fill="#1f2937" font-family="Arial" font-size="24" font-weight="700">工单看板</text>
+  <rect x="220" y="140" width="150" height="88" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <rect x="390" y="140" width="150" height="88" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <rect x="560" y="140" width="150" height="88" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <rect x="730" y="140" width="180" height="88" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <rect x="220" y="260" width="690" height="210" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <line x1="250" y1="318" x2="880" y2="318" stroke="#edf0f5" stroke-width="2"/>
+  <line x1="250" y1="372" x2="880" y2="372" stroke="#edf0f5" stroke-width="2"/>
+  <line x1="250" y1="426" x2="880" y2="426" stroke="#edf0f5" stroke-width="2"/>
+  <text x="480" y="510" fill="#7b8794" font-family="Arial" font-size="14" text-anchor="middle">placeholder: replace with real screenshot</text>
+</svg>

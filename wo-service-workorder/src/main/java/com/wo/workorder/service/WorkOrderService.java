@@ -1,5 +1,6 @@
 package com.wo.workorder.service;
 
+import com.wo.api.dto.workorder.FlowRecordVO;
 import com.wo.api.dto.workorder.WorkOrderBriefVO;
 import com.wo.api.dto.workorder.WorkOrderCreateDTO;
 import com.wo.api.dto.workorder.WorkOrderQueryDTO;
@@ -53,6 +54,11 @@ public interface WorkOrderService {
     void confirmWorkOrder(Long id, Long userId);
 
     /**
+     * 驳回人工处理结果，退回处理中
+     */
+    void rejectResolution(Long id, Long userId, String reason);
+
+    /**
      * AI 重新生成解决方案
      */
     WorkOrderVO regenerateSolution(Long id, Long userId);
@@ -71,6 +77,11 @@ public interface WorkOrderService {
      * 获取部门待处理工单
      */
     PageResult<WorkOrderBriefVO> getDepartmentWorkOrders(String department, int page, int size);
+
+    /**
+     * 查询工单流转记录
+     */
+    List<FlowRecordVO> listFlowRecords(Long id);
 
     /**
      * 更新 SLA 截止时间

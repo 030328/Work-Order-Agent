@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f4f6f9"/>
+  <rect x="0" y="0" width="560" height="540" fill="#243044"/>
+  <text x="64" y="96" fill="#c8d3e2" font-family="Arial" font-size="24" font-weight="700">AI Agent Work Order</text>
+  <text x="64" y="178" fill="#ffffff" font-family="Arial" font-size="42" font-weight="700">登录与注册</text>
+  <text x="64" y="230" fill="#c8d3e2" font-family="Arial" font-size="22">JWT 鉴权、角色控制、统一入口</text>
+  <rect x="620" y="92" width="280" height="356" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <text x="652" y="150" fill="#1f2937" font-family="Arial" font-size="24" font-weight="700">登录系统</text>
+  <rect x="652" y="190" width="216" height="40" rx="6" fill="#f8fafc" stroke="#d8dee8"/>
+  <rect x="652" y="250" width="216" height="40" rx="6" fill="#f8fafc" stroke="#d8dee8"/>
+  <rect x="652" y="326" width="216" height="44" rx="6" fill="#409eff"/>
+  <text x="744" y="354" fill="#ffffff" font-family="Arial" font-size="16" text-anchor="middle">登录</text>
+  <text x="480" y="510" fill="#7b8794" font-family="Arial" font-size="14" text-anchor="middle">placeholder: replace with real screenshot</text>
+</svg>

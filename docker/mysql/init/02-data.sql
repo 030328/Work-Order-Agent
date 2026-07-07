@@ -3,16 +3,17 @@
 -- ============================================================
 
 USE wo_system;
+SET NAMES utf8mb4;
 
 -- ============================================================
 -- Admin User (password: admin123, BCrypt encoded)
 -- ============================================================
 INSERT INTO sys_user (id, username, password, real_name, email, phone, department, role, status) VALUES
-(1, 'admin', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '系统管理员', 'admin@wo-system.com', '13800000000', '技术部', 'ADMIN', 1),
-(2, 'zhangsan', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '张三', 'zhangsan@wo-system.com', '13800000001', '技术部', 'AGENT', 1),
-(3, 'lisi', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '李四', 'lisi@wo-system.com', '13800000002', '运营部', 'AGENT', 1),
-(4, 'wangwu', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '王五', 'wangwu@wo-system.com', '13800000003', '产品部', 'USER', 1),
-(5, 'zhaoliu', '$2a$10$N.zmdr9k7uOCQb376NoUnuTJ8iAt6Z5EHsM8lE9lBOsl7iAt6Z5EH', '赵六', 'zhaoliu@wo-system.com', '13800000004', '技术部', 'MANAGER', 1);
+(1, 'admin', '$2a$10$7R4F4EnbqpbYbgUNv1I0WeUtrLfsS6Fp92ARxukdRx9mZJQLYRlFW', '系统管理员', 'admin@wo-system.com', '13800000000', '技术部', 'ADMIN', 1),
+(2, 'zhangsan', '$2a$10$7R4F4EnbqpbYbgUNv1I0WeUtrLfsS6Fp92ARxukdRx9mZJQLYRlFW', '张三', 'zhangsan@wo-system.com', '13800000001', '技术部', 'AGENT', 1),
+(3, 'lisi', '$2a$10$7R4F4EnbqpbYbgUNv1I0WeUtrLfsS6Fp92ARxukdRx9mZJQLYRlFW', '李四', 'lisi@wo-system.com', '13800000002', '运营部', 'AGENT', 1),
+(4, 'wangwu', '$2a$10$7R4F4EnbqpbYbgUNv1I0WeUtrLfsS6Fp92ARxukdRx9mZJQLYRlFW', '王五', 'wangwu@wo-system.com', '13800000003', '产品部', 'USER', 1),
+(5, 'zhaoliu', '$2a$10$7R4F4EnbqpbYbgUNv1I0WeUtrLfsS6Fp92ARxukdRx9mZJQLYRlFW', '赵六', 'zhaoliu@wo-system.com', '13800000004', '技术部', 'MANAGER', 1);
 
 -- ============================================================
 -- Role Permissions
@@ -29,20 +30,22 @@ INSERT INTO sys_role_permission (role, permission) VALUES
 -- ============================================================
 INSERT INTO wf_definition (id, name, description, definition_json, version, status) VALUES
 (1, '标准工单流程', '标准的工单处理流程，包含从创建到关闭的完整生命周期',
- '{"states":["DRAFT","OPEN","IN_PROGRESS","PENDING_REVIEW","RESOLVED","CLOSED","REJECTED"],"initialState":"DRAFT"}',
+ '{"states":["DRAFT","OPEN","AI_SOLVED","ESCALATED","IN_PROGRESS","RESOLVED","CLOSED"],"initialState":"DRAFT"}',
  1, 1);
 
 -- Workflow Transitions
 INSERT INTO wf_transition (definition_id, from_state, to_state, event, required_role, sort_order) VALUES
 (1, 'DRAFT', 'OPEN', 'submit', 'USER', 1),
 (1, 'OPEN', 'IN_PROGRESS', 'start', 'AGENT', 2),
-(1, 'OPEN', 'REJECTED', 'reject', 'MANAGER', 3),
-(1, 'IN_PROGRESS', 'PENDING_REVIEW', 'review', 'AGENT', 4),
-(1, 'IN_PROGRESS', 'OPEN', 'reassign', 'MANAGER', 5),
-(1, 'PENDING_REVIEW', 'RESOLVED', 'approve', 'USER', 6),
-(1, 'PENDING_REVIEW', 'IN_PROGRESS', 'reopen', 'USER', 7),
-(1, 'RESOLVED', 'CLOSED', 'close', 'USER', 8),
-(1, 'REJECTED', 'OPEN', 'resubmit', 'USER', 9);
+(1, 'OPEN', 'ESCALATED', 'escalate', 'USER', 3),
+(1, 'OPEN', 'CLOSED', 'cancel', 'USER', 4),
+(1, 'AI_SOLVED', 'CLOSED', 'confirm_ai_solution', 'USER', 5),
+(1, 'AI_SOLVED', 'ESCALATED', 'reject_ai_solution', 'USER', 6),
+(1, 'ESCALATED', 'IN_PROGRESS', 'claim', 'AGENT', 7),
+(1, 'IN_PROGRESS', 'RESOLVED', 'resolve', 'AGENT', 8),
+(1, 'IN_PROGRESS', 'OPEN', 'reassign', 'MANAGER', 9),
+(1, 'RESOLVED', 'CLOSED', 'close', 'USER', 10),
+(1, 'RESOLVED', 'IN_PROGRESS', 'reopen', 'USER', 11);
 
 -- ============================================================
 -- SLA Rules

@@ -1,5 +1,6 @@
 package com.wo.gateway.filter;
 
+import com.wo.common.constant.CommonConstant;
 import com.wo.common.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -43,6 +44,16 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             "/webjars/**"
     );
 
+    /**
+     * Service-to-service endpoints must not be exposed through the public gateway.
+     */
+    private static final List<String> INTERNAL_ONLY_PATHS = Arrays.asList(
+            "/api/workorders/internal/**",
+            "/api/workflow/transitions/**",
+            "/api/workflow/sla/**",
+            "/api/workflow/definitions/**"
+    );
+
     @Override
     public int getOrder() {
         return -100;
@@ -52,6 +63,10 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
+
+        if (isInternalOnlyPath(path)) {
+            return forbiddenResponse(exchange, "Internal endpoint is not exposed through gateway");
+        }
 
         // Check if the path is in the whitelist
         if (isWhitelistPath(path)) {
@@ -77,11 +92,17 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
             String username = String.valueOf(claims.get("username"));
             String role = String.valueOf(claims.get("role"));
 
-            // Mutate the request to add user info headers
+            // Strip any client-supplied identity headers before adding trusted JWT claims.
             ServerHttpRequest mutatedRequest = request.mutate()
-                    .header("X-User-Id", userId != null ? userId : "")
-                    .header("X-Username", username != null ? username : "")
-                    .header("X-Role", role != null ? role : "")
+                    .headers(headers -> {
+                        headers.remove(CommonConstant.USER_ID_HEADER);
+                        headers.remove(CommonConstant.USERNAME_HEADER);
+                        headers.remove(CommonConstant.ROLE_HEADER);
+                        headers.remove(CommonConstant.INTERNAL_SERVICE_TOKEN_HEADER);
+                    })
+                    .header(CommonConstant.USER_ID_HEADER, userId != null ? userId : "")
+                    .header(CommonConstant.USERNAME_HEADER, username != null ? username : "")
+                    .header(CommonConstant.ROLE_HEADER, role != null ? role : "")
                     .build();
 
             ServerWebExchange mutatedExchange = exchange.mutate()
@@ -102,17 +123,30 @@ public class JwtAuthFilter implements GlobalFilter, Ordered {
         return WHITELIST.stream().anyMatch(pattern -> PATH_MATCHER.match(pattern, path));
     }
 
+    private boolean isInternalOnlyPath(String path) {
+        return INTERNAL_ONLY_PATHS.stream().anyMatch(pattern -> PATH_MATCHER.match(pattern, path));
+    }
+
     /**
      * Return a 401 Unauthorized response with a JSON body.
      */
     private Mono<Void> unauthorizedResponse(ServerWebExchange exchange, String message) {
+        return jsonErrorResponse(exchange, HttpStatus.UNAUTHORIZED, 401, message);
+    }
+
+    private Mono<Void> forbiddenResponse(ServerWebExchange exchange, String message) {
+        return jsonErrorResponse(exchange, HttpStatus.FORBIDDEN, 403, message);
+    }
+
+    private Mono<Void> jsonErrorResponse(ServerWebExchange exchange, HttpStatus status, int code, String message) {
         ServerHttpResponse response = exchange.getResponse();
-        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
         String body = String.format(
-                "{\"code\":401,\"message\":\"%s\",\"data\":null}",
-                message
+                "{\"code\":%d,\"message\":\"%s\",\"data\":null}",
+                code,
+                message.replace("\"", "\\\"")
         );
         DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
         return response.writeWith(Mono.just(buffer));

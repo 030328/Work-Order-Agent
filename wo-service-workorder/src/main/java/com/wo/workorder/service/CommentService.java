@@ -15,5 +15,5 @@ public interface CommentService {
     /**
      * 添加评论
      */
-    void addComment(Long workOrderId, CommentCreateDTO dto, Long userId, boolean isAiGenerated);
+    CommentVO addComment(Long workOrderId, CommentCreateDTO dto, Long userId, boolean isAiGenerated);
 }

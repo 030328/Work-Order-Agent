@@ -1,9 +1,14 @@
 package com.wo.user.config;
 
+import com.wo.common.constant.CommonConstant;
+import com.wo.common.security.InternalServiceAuth;
+import com.wo.common.util.JwtUtil;
+import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,11 +25,10 @@ import java.util.List;
  * and populates the Spring Security context.
  */
 @Component
+@RequiredArgsConstructor
 public class JwtTokenFilter extends OncePerRequestFilter {
 
-    private static final String HEADER_USER_ID = "X-User-Id";
-    private static final String HEADER_USERNAME = "X-Username";
-    private static final String HEADER_ROLE = "X-Role";
+    private final InternalServiceAuth internalServiceAuth;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -39,29 +43,50 @@ public class JwtTokenFilter extends OncePerRequestFilter {
             return;
         }
 
-        // Read headers set by the gateway
-        String userId = request.getHeader(HEADER_USER_ID);
-        String username = request.getHeader(HEADER_USERNAME);
-        String role = request.getHeader(HEADER_ROLE);
-
-        if (StringUtils.hasText(userId) && StringUtils.hasText(username)) {
-            // Build authorities from role
-            List<SimpleGrantedAuthority> authorities = Collections.emptyList();
-            if (StringUtils.hasText(role)) {
-                authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role));
-            }
-
-            // Create authentication token
-            UsernamePasswordAuthenticationToken authentication =
-                    new UsernamePasswordAuthenticationToken(userId, null, authorities);
-
-            // Store additional details in the authentication
-            authentication.setDetails(username);
-
-            // Set security context
-            SecurityContextHolder.getContext().setAuthentication(authentication);
+        if (authenticateByJwt(request) || authenticateInternalService(request)) {
+            filterChain.doFilter(request, response);
+            return;
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean authenticateByJwt(HttpServletRequest request) {
+        String header = request.getHeader(CommonConstant.TOKEN_HEADER);
+        if (!StringUtils.hasText(header) || !header.startsWith(CommonConstant.TOKEN_PREFIX)) {
+            return false;
+        }
+
+        try {
+            Claims claims = JwtUtil.parseToken(header.substring(CommonConstant.TOKEN_PREFIX.length()));
+            String userId = String.valueOf(claims.get("userId"));
+            String username = claims.get("username", String.class);
+            String role = claims.get("role", String.class);
+            setAuthentication(userId, username, role);
+            return true;
+        } catch (Exception e) {
+            SecurityContextHolder.clearContext();
+            return false;
+        }
+    }
+
+    private boolean authenticateInternalService(HttpServletRequest request) {
+        if (!internalServiceAuth.isInternalRequest(request)) {
+            return false;
+        }
+        setAuthentication("0", "internal-service", "SYSTEM");
+        return true;
+    }
+
+    private void setAuthentication(String userId, String username, String role) {
+        List<SimpleGrantedAuthority> authorities = Collections.emptyList();
+        if (StringUtils.hasText(role)) {
+            authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + role));
+        }
+
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken(userId, null, authorities);
+        authentication.setDetails(username);
+        SecurityContextHolder.getContext().setAuthentication(authentication);
     }
 }

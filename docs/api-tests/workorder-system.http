@@ -1,0 +1,90 @@
+@baseUrl = http://localhost:8080/api
+@username = admin
+@password = admin123
+@workOrderId = 1001
+
+### Login
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "password": "{{password}}"
+}
+
+### Create work order
+# @name createWorkOrder
+POST {{baseUrl}}/workorders
+Authorization: Bearer {{login.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "title": "登录后页面空白",
+  "description": "用户登录后停留在空白页，控制台提示接口 500。",
+  "category": "BUG",
+  "priority": "HIGH",
+  "tags": ["login", "gateway"]
+}
+
+### Query work orders
+GET {{baseUrl}}/workorders?page=1&size=10
+Authorization: Bearer {{login.response.body.data.token}}
+
+### Get work order detail
+GET {{baseUrl}}/workorders/{{workOrderId}}
+Authorization: Bearer {{login.response.body.data.token}}
+
+### Add public comment
+POST {{baseUrl}}/workorders/{{workOrderId}}/comments
+Authorization: Bearer {{login.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "content": "已复现问题，准备查看网关日志。",
+  "isInternal": false
+}
+
+### Add attachment metadata
+POST {{baseUrl}}/workorders/{{workOrderId}}/attachments/metadata
+Authorization: Bearer {{login.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "fileName": "gateway-error.log",
+  "fileUrl": "https://example.com/files/gateway-error.log",
+  "fileSize": 2048,
+  "fileType": "text/plain"
+}
+
+### Get comments
+GET {{baseUrl}}/workorders/{{workOrderId}}/comments
+Authorization: Bearer {{login.response.body.data.token}}
+
+### Get attachments
+GET {{baseUrl}}/workorders/{{workOrderId}}/attachments
+Authorization: Bearer {{login.response.body.data.token}}
+
+### Get flow records
+GET {{baseUrl}}/workorders/{{workOrderId}}/flows
+Authorization: Bearer {{login.response.body.data.token}}
+
+### Resolve work order
+PUT {{baseUrl}}/workorders/{{workOrderId}}/status
+Authorization: Bearer {{login.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "status": "RESOLVED",
+  "comment": "已修复网关转发配置并验证登录链路。"
+}
+
+### Reject manual resolution
+PUT {{baseUrl}}/workorders/{{workOrderId}}/reject
+Authorization: Bearer {{login.response.body.data.token}}
+Content-Type: application/json
+
+{
+  "reason": "问题仍可复现，请补充检查回调地址配置。"
+}
+

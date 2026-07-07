@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f5f7fb"/>
+  <rect x="40" y="32" width="880" height="92" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <text x="72" y="70" fill="#409eff" font-family="Arial" font-size="16" font-weight="700">WO-20260706-001</text>
+  <text x="72" y="102" fill="#111827" font-family="Arial" font-size="24" font-weight="700">工单详情与协作</text>
+  <rect x="40" y="148" width="540" height="150" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <rect x="604" y="148" width="316" height="150" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <rect x="40" y="322" width="540" height="170" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <rect x="604" y="322" width="316" height="170" rx="8" fill="#ffffff" stroke="#e7eaf0"/>
+  <text x="72" y="184" fill="#1f2937" font-family="Arial" font-size="18" font-weight="700">AI 分析</text>
+  <text x="636" y="184" fill="#1f2937" font-family="Arial" font-size="18" font-weight="700">处理动作</text>
+  <text x="72" y="358" fill="#1f2937" font-family="Arial" font-size="18" font-weight="700">协作评论</text>
+  <text x="636" y="358" fill="#1f2937" font-family="Arial" font-size="18" font-weight="700">流转记录</text>
+  <text x="480" y="520" fill="#7b8794" font-family="Arial" font-size="14" text-anchor="middle">placeholder: replace with real screenshot</text>
+</svg>

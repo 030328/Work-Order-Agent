@@ -1,6 +1,7 @@
 package com.wo.api.client.fallback;
 
 import com.wo.api.client.AiAgentClient;
+import com.wo.api.dto.ai.KnowledgeIndexRequest;
 import com.wo.api.dto.ai.WorkOrderAnalysisRequest;
 import com.wo.api.dto.ai.WorkOrderAnalysisResult;
 import com.wo.common.result.R;
@@ -19,6 +20,11 @@ public class AiAgentClientFallback implements FallbackFactory<AiAgentClient> {
             @Override
             public R<WorkOrderAnalysisResult> analyzeWorkOrder(WorkOrderAnalysisRequest request) {
                 return R.fail("AI分析服务暂时不可用");
+            }
+
+            @Override
+            public R<String> indexKnowledge(KnowledgeIndexRequest request) {
+                return R.fail("知识库索引服务暂时不可用");
             }
         };
     }

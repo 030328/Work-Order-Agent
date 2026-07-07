@@ -126,7 +126,10 @@ public class WorkOrderTools {
     public String updateWorkOrderStatus(Long workOrderId, String status, String comment) {
         log.info("Tool: updateWorkOrderStatus - id={}, status={}", workOrderId, status);
         try {
-            R<Void> result = workOrderClient.updateWorkOrderStatus(workOrderId, status, comment);
+            WorkOrderStatusUpdateDTO dto = new WorkOrderStatusUpdateDTO();
+            dto.setStatus(status);
+            dto.setComment(comment);
+            R<Void> result = workOrderClient.updateWorkOrderStatus(workOrderId, dto);
             if (result != null && result.getCode() == 0) {
                 return String.format("工单 %d 状态已更新为 %s", workOrderId, status);
             }
@@ -165,9 +168,9 @@ public class WorkOrderTools {
     public String listAvailableAgents(String role) {
         log.info("Tool: listAvailableAgents - role={}", role);
         try {
-            R<List<UserVO>> result = userClient.listUsers(role, null);
+            R<PageResult<UserVO>> result = userClient.listUsers(role, null);
             if (result != null && result.getData() != null) {
-                List<UserVO> users = result.getData();
+                List<UserVO> users = result.getData().getRecords();
                 if (users.isEmpty()) {
                     return "未找到可用的处理人";
                 }

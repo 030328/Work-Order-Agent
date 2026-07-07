@@ -1,19 +1,26 @@
 package com.wo.agent.entity;
 
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.wo.common.mybatis.BaseEntity;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 
 /**
  * AI会话实体
  */
-@Data
-@EqualsAndHashCode(callSuper = true)
 @TableName("ai_session")
-public class AiSession extends BaseEntity {
+@Data
+public class AiSession implements Serializable {
+
+    /**
+     * 会话ID
+     */
+    @TableId(type = IdType.INPUT)
+    private String id;
 
     /**
      * 用户ID
@@ -46,7 +53,23 @@ public class AiSession extends BaseEntity {
     private Long totalTokens = 0L;
 
     /**
+     * 创建时间
+     */
+    private LocalDateTime createdAt;
+
+    /**
+     * 更新时间
+     */
+    private LocalDateTime updatedAt;
+
+    /**
      * 最后活跃时间
      */
     private LocalDateTime lastActiveAt;
+
+    /**
+     * 逻辑删除标记
+     */
+    @TableLogic
+    private Integer deleted;
 }
