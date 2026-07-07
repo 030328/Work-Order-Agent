@@ -23,6 +23,8 @@ public class KnowledgeSearchResult implements Serializable {
 
     private String sourceId;
 
+    private String category;
+
     private Double score;
 
     private Integer verified;

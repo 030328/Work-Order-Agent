@@ -25,13 +25,25 @@
           <el-icon><Plus /></el-icon>
           <span>创建工单</span>
         </el-menu-item>
+        <el-menu-item v-if="canHandleDepartmentPool" index="/department-pool">
+          <el-icon><List /></el-icon>
+          <span>部门工单池</span>
+        </el-menu-item>
         <el-menu-item index="/chat">
           <el-icon><ChatDotRound /></el-icon>
           <span>AI 助手</span>
         </el-menu-item>
+        <el-menu-item v-if="canManageUsers" index="/ai/analyze">
+          <el-icon><ChatDotRound /></el-icon>
+          <span>AI 分析</span>
+        </el-menu-item>
         <el-menu-item index="/knowledge">
           <el-icon><Document /></el-icon>
           <span>知识库</span>
+        </el-menu-item>
+        <el-menu-item v-if="canManageUsers" index="/users">
+          <el-icon><User /></el-icon>
+          <span>用户管理</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -61,6 +73,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ChatDotRound, Document, List, Plus, User } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -69,13 +82,18 @@ const roleLabel = computed(() => {
   const map = { ADMIN: '管理员', MANAGER: '部门经理', AGENT: '处理人员', USER: '普通用户' }
   return map[localStorage.getItem('role')] || '普通用户'
 })
+const canManageUsers = computed(() => ['ADMIN', 'MANAGER', 'SYSTEM'].includes(localStorage.getItem('role')))
+const canHandleDepartmentPool = computed(() => ['ADMIN', 'MANAGER', 'AGENT', 'SYSTEM'].includes(localStorage.getItem('role')))
 
 const pageMeta = {
   Dashboard: ['工单工作台', '集中查看、筛选和跟进工单'],
   CreateWorkOrder: ['创建工单', '录入问题并触发 AI 分析和 SLA 分配'],
+  DepartmentPool: ['部门工单池', '查看本部门待认领或待分配的人工工单'],
   WorkOrderDetail: ['工单详情', '查看上下文、AI 建议和处理动作'],
   Chat: ['AI 助手', '通过自然语言查询工单和知识库'],
-  Knowledge: ['知识库', '维护 RAG 检索使用的业务知识']
+  AiAnalyze: ['AI 分析', '独立验证 AI 工单分析能力和建议结果'],
+  Knowledge: ['知识库', '维护 RAG 检索使用的业务知识'],
+  UserManagement: ['用户管理', '维护账号、角色、部门和处理人池']
 }
 
 const currentMeta = computed(() => pageMeta[route.name] || ['工单系统', ''])

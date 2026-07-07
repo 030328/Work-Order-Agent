@@ -4,9 +4,13 @@
       <div class="chat-header">
         <div>
           <h3>AI 工单助手</h3>
-          <p>可查询工单、检索知识库，也可以协助创建工单</p>
+          <p>会话 {{ shortSessionId }}，支持查询工单、检索知识库和辅助创建工单</p>
         </div>
-        <el-tag type="success">在线</el-tag>
+        <div class="header-actions">
+          <el-tag type="success">在线</el-tag>
+          <el-button size="small" @click="loadHistory">加载历史</el-button>
+          <el-button size="small" type="warning" plain @click="handleClearSession">清空会话</el-button>
+        </div>
       </div>
 
       <div class="chat-messages" ref="messagesRef">
@@ -35,27 +39,41 @@
         <el-button @click="quickAction('帮我创建一个高优先级的登录故障工单')">创建故障工单</el-button>
       </div>
 
-      <div class="panel-title secondary">能力范围</div>
+      <div class="panel-title secondary">会话能力</div>
       <ul class="capability-list">
-        <li>自然语言查询工单</li>
-        <li>调用知识库 RAG 检索</li>
-        <li>辅助生成工单内容</li>
-        <li>触发工单状态操作</li>
+        <li>按 sessionId 保留最近 20 条上下文</li>
+        <li>可重新加载后端会话历史</li>
+        <li>可清空当前会话并开始新对话</li>
+        <li>支持自然语言触发工单工具</li>
       </ul>
     </aside>
   </div>
 </template>
 
 <script setup>
-import { nextTick, ref } from 'vue'
-import { chat } from '../api'
+import { computed, nextTick, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { chat, clearChatSession, getChatHistory } from '../api'
+
+const SESSION_KEY = 'wo-chat-session-id'
+const welcomeMessage = { role: 'assistant', content: '你好，我是 AI 工单助手。你可以让我查询工单、检索知识库，或帮你整理一条新工单。' }
 
 const input = ref('')
 const loading = ref(false)
-const messages = ref([
-  { role: 'assistant', content: '你好，我是 AI 工单助手。你可以让我查询工单、检索知识库，或帮你整理一条新工单。' }
-])
+const messages = ref([welcomeMessage])
 const messagesRef = ref(null)
+const sessionId = ref(loadOrCreateSessionId())
+const shortSessionId = computed(() => sessionId.value.slice(-10))
+
+function loadOrCreateSessionId() {
+  const existing = localStorage.getItem(SESSION_KEY)
+  if (existing) return existing
+  const next = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `web-session-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  localStorage.setItem(SESSION_KEY, next)
+  return next
+}
 
 const scrollToBottom = () => {
   nextTick(() => {
@@ -63,6 +81,25 @@ const scrollToBottom = () => {
       messagesRef.value.scrollTop = messagesRef.value.scrollHeight
     }
   })
+}
+
+const normalizeHistoryMessage = (item) => ({
+  role: item.role === 'user' ? 'user' : 'assistant',
+  content: item.content || ''
+})
+
+const loadHistory = async () => {
+  try {
+    const res = await getChatHistory(sessionId.value)
+    if (res.code === 0 && Array.isArray(res.data) && res.data.length > 0) {
+      messages.value = res.data.map(normalizeHistoryMessage)
+    } else {
+      messages.value = [welcomeMessage]
+    }
+    scrollToBottom()
+  } catch (e) {
+    messages.value = [welcomeMessage]
+  }
 }
 
 const sendMessage = async () => {
@@ -75,11 +112,15 @@ const sendMessage = async () => {
 
   loading.value = true
   try {
-    const res = await chat({ message: userMsg, sessionId: 'web-session-1' })
+    const res = await chat({ message: userMsg, sessionId: sessionId.value })
     if (res.code === 0) {
+      if (res.data.sessionId && res.data.sessionId !== sessionId.value) {
+        sessionId.value = res.data.sessionId
+        localStorage.setItem(SESSION_KEY, res.data.sessionId)
+      }
       messages.value.push({ role: 'assistant', content: res.data.content })
     } else {
-      messages.value.push({ role: 'assistant', content: '抱歉，处理失败：' + res.message })
+      messages.value.push({ role: 'assistant', content: `抱歉，处理失败：${res.message}` })
     }
   } catch (e) {
     messages.value.push({ role: 'assistant', content: '网络错误，请稍后重试' })
@@ -89,10 +130,23 @@ const sendMessage = async () => {
   }
 }
 
+const handleClearSession = async () => {
+  await ElMessageBox.confirm('确认清空当前 AI 会话历史？', '清空会话', { type: 'warning' })
+  const res = await clearChatSession(sessionId.value)
+  if (res.code === 0) {
+    messages.value = [welcomeMessage]
+    ElMessage.success('会话已清空')
+  } else {
+    ElMessage.error(res.message || '清空失败')
+  }
+}
+
 const quickAction = (msg) => {
   input.value = msg
   sendMessage()
 }
+
+onMounted(loadHistory)
 </script>
 
 <style scoped>
@@ -120,6 +174,7 @@ const quickAction = (msg) => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 18px 20px;
   border-bottom: 1px solid #edf0f5;
 }
@@ -133,6 +188,14 @@ const quickAction = (msg) => {
   margin: 4px 0 0;
   color: #7b8794;
   font-size: 13px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .chat-messages {
@@ -230,6 +293,15 @@ const quickAction = (msg) => {
 @media (max-width: 980px) {
   .chat-page {
     grid-template-columns: 1fr;
+  }
+
+  .chat-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    justify-content: flex-start;
   }
 }
 </style>

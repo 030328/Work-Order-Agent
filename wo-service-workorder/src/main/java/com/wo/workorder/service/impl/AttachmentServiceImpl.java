@@ -16,12 +16,21 @@ import com.wo.workorder.service.AttachmentService;
 import com.wo.workorder.service.WorkOrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.BeanUtils;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -33,6 +42,9 @@ public class AttachmentServiceImpl implements AttachmentService {
     private final FlowRecordMapper flowRecordMapper;
     private final WorkOrderService workOrderService;
     private final UserClient userClient;
+
+    @Value("${workorder.attachment.storage-path:uploads/workorder-attachments}")
+    private String storagePath;
 
     @Override
     public List<AttachmentVO> listAttachments(Long workOrderId) {
@@ -65,18 +77,51 @@ public class AttachmentServiceImpl implements AttachmentService {
 
     @Override
     public AttachmentVO uploadAttachment(Long workOrderId, MultipartFile file, Long uploaderId) {
+        workOrderService.getWorkOrder(workOrderId);
+        if (uploaderId == null) {
+            throw new BizException(ErrorCode.UNAUTHORIZED);
+        }
         if (file == null || file.isEmpty()) {
             throw new BizException(ErrorCode.PARAM_ERROR, "file is required");
         }
         String fileName = StringUtils.hasText(file.getOriginalFilename())
                 ? file.getOriginalFilename()
                 : "attachment";
+        String storedName = buildStoredName(workOrderId, fileName);
+        Path storageDir = resolveStorageDir();
+        Path target = storageDir.resolve(storedName).normalize();
+        if (!target.startsWith(storageDir)) {
+            throw new BizException(ErrorCode.PARAM_ERROR, "invalid file name");
+        }
+        try {
+            Files.createDirectories(storageDir);
+            file.transferTo(target);
+        } catch (IOException e) {
+            throw new BizException(ErrorCode.SYSTEM_ERROR, "failed to store attachment");
+        }
+
         AttachmentCreateDTO dto = new AttachmentCreateDTO();
         dto.setFileName(fileName);
         dto.setFileSize(file.getSize());
         dto.setFileType(file.getContentType());
-        dto.setFileUrl("metadata-only://workorders/" + workOrderId + "/attachments/" + fileName.replace('\\', '_').replace('/', '_'));
+        dto.setFileUrl("/api/workorders/" + workOrderId + "/attachments/files/" + storedName);
         return createAttachment(workOrderId, dto, uploaderId);
+    }
+
+    @Override
+    public Resource loadAttachmentFile(Long workOrderId, String storedName) {
+        workOrderService.getWorkOrder(workOrderId);
+        String safeName = sanitizeFileName(storedName);
+        Path storageDir = resolveStorageDir();
+        Path target = storageDir.resolve(safeName).normalize();
+        if (!target.startsWith(storageDir) || !Files.isReadable(target)) {
+            throw new BizException(ErrorCode.NOT_FOUND, "attachment file not found");
+        }
+        try {
+            return new UrlResource(target.toUri());
+        } catch (MalformedURLException e) {
+            throw new BizException(ErrorCode.SYSTEM_ERROR, "failed to load attachment file");
+        }
     }
 
     private AttachmentVO convertToVO(WoAttachment attachment) {
@@ -99,6 +144,20 @@ public class AttachmentServiceImpl implements AttachmentService {
             log.warn("Resolve uploader name failed, userId={}", userId, e);
         }
         return "User#" + userId;
+    }
+
+    private Path resolveStorageDir() {
+        return Paths.get(storagePath).toAbsolutePath().normalize();
+    }
+
+    private String buildStoredName(Long workOrderId, String originalName) {
+        String safeName = sanitizeFileName(originalName);
+        return workOrderId + "-" + UUID.randomUUID() + "-" + safeName;
+    }
+
+    private String sanitizeFileName(String fileName) {
+        String name = Paths.get(fileName == null ? "attachment" : fileName).getFileName().toString();
+        return name.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 
     private void saveFlowRecord(Long workOrderId, Long uploaderId, String comment) {

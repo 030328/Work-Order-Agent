@@ -52,6 +52,7 @@ public class KnowledgeController {
     @PostMapping("/search")
     public R<?> search(@RequestBody SearchRequest request) {
         var results = ragService.retrieve(request.getQuery(), request.getTopK());
+        results.forEach(this::enrichSearchResult);
         return R.ok(results);
     }
 
@@ -80,6 +81,35 @@ public class KnowledgeController {
 
     private String buildDefaultTitle(String sourceType) {
         return "知识库文档-" + sourceType + "-" + System.currentTimeMillis();
+    }
+
+    private void enrichSearchResult(com.wo.api.dto.ai.KnowledgeSearchResult result) {
+        Long documentId = parseDocumentId(result.getSourceId());
+        if (documentId == null) {
+            return;
+        }
+        KbDocument document = kbDocumentMapper.selectById(documentId);
+        if (document == null) {
+            return;
+        }
+        result.setId(document.getId());
+        result.setTitle(document.getTitle());
+        result.setSourceType(document.getSourceType());
+        result.setSourceId(document.getSourceId());
+        result.setCategory(document.getCategory());
+        result.setVerified(document.getVerified());
+        result.setLikeCount(document.getLikeCount());
+    }
+
+    private Long parseDocumentId(String sourceId) {
+        if (!StringUtils.hasText(sourceId)) {
+            return null;
+        }
+        try {
+            return Long.valueOf(sourceId);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
     }
 
     @Data

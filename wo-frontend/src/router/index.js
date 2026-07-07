@@ -23,6 +23,11 @@ const routes = [
         component: () => import('../views/CreateWorkOrder.vue')
       },
       {
+        path: 'department-pool',
+        name: 'DepartmentPool',
+        component: () => import('../views/DepartmentPool.vue')
+      },
+      {
         path: 'workorder/:id',
         name: 'WorkOrderDetail',
         component: () => import('../views/WorkOrderDetail.vue')
@@ -36,6 +41,16 @@ const routes = [
         path: 'knowledge',
         name: 'Knowledge',
         component: () => import('../views/Knowledge.vue')
+      },
+      {
+        path: 'ai/analyze',
+        name: 'AiAnalyze',
+        component: () => import('../views/AiAnalyze.vue')
+      },
+      {
+        path: 'users',
+        name: 'UserManagement',
+        component: () => import('../views/UserManagement.vue')
       }
     ]
   }
